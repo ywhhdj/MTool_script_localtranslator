@@ -1,0 +1,20 @@
+{
+  "name": "localtranslator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm run dev",
+    "build": "pnpm run build:server",
+    "build:server": "vite build --ssr src/entry-server.ts --outDir dist/",
+    "check": "vue-tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "openai": "^6.17.0"
+  }
+}

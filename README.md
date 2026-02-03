@@ -1,2 +1,16 @@
-# MTool_script_localtranslator
-MTool社区小脚本,用来翻译原文
+# MTool社区一个小脚本,用来翻译日语文本,只支持部分引擎的部分文本,目前已经发布到MTool社区的脚本
+ 支持格式:MTool社区的`CollData.json`和常规`key-value`JSON格式和CSV格式
+ ```
+  {
+    "Japanese": "日语",
+    ...
+  }
+  "Japanese","日语"
+  ```
+  ```csv
+    原文包含(AI翻译若不存在必填,否则可选),AI翻译文本包含(原文若不存在必填,否则可选),替换文本(必须)
+    "Japanese","AI翻译文本","替换文本",
+  ```
+ 支持导出JSON(有缺陷)
+ ...可能不维护或者添加个AI功能?
+ 
