@@ -1,0 +1,2 @@
+# MTool_script_localtranslator
+MTool社区小脚本,用来翻译原文
