@@ -110,7 +110,7 @@ const formatPercent = (n: any): string => {
             <td>{{ formatNumber(aiPendingCount) }}</td>
           </tr>
           <tr>
-            <td>AI Fix 规则</td>
+            <td>AI 翻译修正规则</td>
             <td>{{ formatNumber(stats.aiFixRules) }}</td>
           </tr>
           <tr>

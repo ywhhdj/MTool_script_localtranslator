@@ -13,6 +13,7 @@
  *   ccc: 替换结果
  */
 
+import config from '../config';
 import { getFileType, getGameName, parseDelimited, parseRegex, parseXLSX, safeJSONParse, timestampFileName } from '../utils';
 import logger, { LogLevel } from './logger';
 
@@ -129,13 +130,17 @@ class AIFixRulesEngine {
   addRule(rule: AIFixRule): void {
     this.rules.push(rule);
     this._recalcStats();
-    console.log(`[MToolTranslatorPlugin][AIFix] ➕ 规则: "${String(rule.aaa).slice(0, 20)}" → "${rule.ccc.slice(0, 30)}"`);
+    if (config.debug) {
+      console.log(`[MToolTranslatorPlugin][AIFix] ➕ 添加规则: "${String(rule.aaa).slice(0, 20)}" → "${rule.ccc.slice(0, 30)}"`);
+    }
   }
 
   addRules(rules: AIFixRule[]): void {
     this.rules.push(...rules);
     this._recalcStats();
-    console.log(`[MToolTranslatorPlugin][AIFix] ➕ 批量添加 ${rules.length} 条规则`);
+    if (config.debug) {
+      console.log(`[MToolTranslatorPlugin][AIFix] ➕ 批量添加 ${rules.length} 条规则`);
+    }
   }
 
   removeRule(index: number): boolean {
@@ -145,7 +150,9 @@ class AIFixRulesEngine {
     }
     const removed = this.rules.splice(index, 1)[0];
     this._recalcStats();
-    console.log(`[MToolTranslatorPlugin][AIFix] ➖ 删除规则 #${index}: "${String(removed.aaa).slice(0, 20)}"`);
+    if (config.debug) {
+      console.log(`[MToolTranslatorPlugin][AIFix] ➖ 删除规则: "${String(removed.aaa).slice(0, 20)}" → "${removed.ccc.slice(0, 30)}"`);
+    }
     logger.addLog(`AI 修正规则已删除 #${index}`, LogLevel.INFO);
     return true;
   }
@@ -154,7 +161,9 @@ class AIFixRulesEngine {
     const count = this.rules.length;
     this.rules = [];
     this.stats = { total: 0, exactRules: 0, regexRules: 0, hits: 0, lastFix: '' };
-    console.log(`[MToolTranslatorPlugin][AIFix] 🧹 清空 ${count} 条规则`);
+    if (config.debug) {
+      console.log(`[MToolTranslatorPlugin][AIFix] 🧹 清空 ${count} 条规则`);
+    }
     logger.addLog('AI 修正规则已清空', LogLevel.INFO);
   }
 
@@ -182,7 +191,9 @@ class AIFixRulesEngine {
       if (fixed !== aiResult) {
         this.stats.hits++;
         this.stats.lastFix = `${original.slice(0, 20)} → ${fixed.slice(0, 40)}`;
-        console.log(`[MToolTranslatorPlugin][AIFix] ✏️ "${aiResult.slice(0, 20)}..." → "${fixed.slice(0, 30)}..."`);
+        if (config.debug) {
+          console.log(`[MToolTranslatorPlugin][AIFix] ✏️ "${aiResult.slice(0, 20)}..." → "${fixed.slice(0, 30)}..."`);
+        }
         return fixed;
       }
     }
@@ -247,6 +258,7 @@ class AIFixRulesEngine {
         const text = await file.text();
         const data = safeJSONParse(text);
         const rules = extractRules(data);
+        this.clear();
         this.addRules(rules);
         logger.addLog(`AI 修正规则加载成功: ${file.name}（${rules.length} 条）`, LogLevel.SUCCESS);
         return true;
@@ -259,6 +271,7 @@ class AIFixRulesEngine {
         const rules = rows
           .filter(row => row.length >= 3 && row[0] && row[2])
           .map(row => makeRule(row[0], row[1] || '', row[2]));
+        this.clear();
         this.addRules(rules);
         logger.addLog(`AI 修正规则加载成功: ${file.name}（${rules.length} 条）`, LogLevel.SUCCESS);
         return true;
@@ -269,6 +282,7 @@ class AIFixRulesEngine {
         const rules = rows
           .filter((row: any[]) => row.length >= 3 && row[0] && row[2])
           .map((row: any[]) => makeRule(row[0], row[1] || '', row[2]));
+        this.clear();
         this.addRules(rules);
         logger.addLog(`AI 修正规则加载成功: ${file.name}（${rules.length} 条）`, LogLevel.SUCCESS);
         return true;

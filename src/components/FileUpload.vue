@@ -86,7 +86,7 @@ const onDragLeave = () => {
 const exportData = async () => {
   const format = config.user.exportFormat.userConfig || 'json';
   const { data, fileName } = translator.exportTranslationData(format);
-  if(typeof format === "undefined") return;
+  if (typeof format === "undefined") return;
   await download(data, fileName, format);
   logger.addLog(`导出成功: ${fileName}`, LogLevel.SUCCESS);
 };
@@ -94,7 +94,7 @@ const exportData = async () => {
 const exportAIFixRules = async (format: 'json' | 'csv' = 'json') => {
   const { data, fileName } = translator.exportAIFixRules(format);
   await download(data, fileName, format);
-  logger.addLog(`AI Fix 规则导出成功: ${fileName}`, LogLevel.SUCCESS);
+  logger.addLog(`AI 翻译修正规则导出成功: ${fileName}`, LogLevel.SUCCESS);
 };
 
 const exportLogs = async () => {
@@ -116,7 +116,7 @@ const clearAll = () => {
   logger.addLog('所有用户数据已清除（默认规则保留）', LogLevel.WARNING);
 };
 
-// ==================== 手动添加 AI Fix 规则 ====================
+// ==================== 手动添加 AI 翻译修正规则 ====================
 
 const newAaa = ref('');
 const newBbb = ref('');
@@ -194,7 +194,7 @@ const resultIconText = computed(() => {
               翻译规则: {{ uploadResult.translationCount }} 条
             </span>
             <span v-if="uploadResult.aiFixCount > 0">
-              AI Fix 规则: {{ uploadResult.aiFixCount }} 条
+              AI 翻译修正规则: {{ uploadResult.aiFixCount }} 条
             </span>
           </div>
         </div>
@@ -222,7 +222,7 @@ const resultIconText = computed(() => {
         </div>
         <div class="drop-text">
           <strong>点击或拖拽文件到此处</strong>
-          <p>自动识别：翻译规则 / AI Fix 规则 / CollData.json</p>
+          <p>自动识别：翻译规则 / AI 翻译修正规则 / CollData.json</p>
         </div>
       </div>
       <div
@@ -255,7 +255,7 @@ const resultIconText = computed(() => {
         <span class="stat-value">{{ translationRulesCount() }}</span>
       </div>
       <div class="stat-chip ai">
-        <span class="stat-label">AI Fix 规则</span>
+        <span class="stat-label">AI 翻译修正规则</span>
         <span class="stat-value">{{ aiFixRulesCount() }}</span>
       </div>
       <div class="stat-chip cache">
@@ -292,9 +292,9 @@ const resultIconText = computed(() => {
       </button>
     </div>
 
-    <!-- 手动添加 AI Fix 规则 -->
+    <!-- 手动添加 AI 翻译修正规则 -->
     <div class="add-section">
-      <div class="section-title">➕ 手动添加 AI Fix 规则</div>
+      <div class="section-title">➕ 手动添加 AI 翻译修正规则</div>
       <div class="form-row">
         <label>aaa (原文/正则):</label>
         <input
@@ -339,13 +339,13 @@ const resultIconText = computed(() => {
       <p><strong>📌 自动识别规则：</strong></p>
       <ul>
         <li><b>两列</b> → 翻译规则（原文 → 译文）</li>
-        <li><b>三列</b> → AI Fix 规则（aaa原文 + bbb译文匹配 + ccc替换）</li>
+        <li><b>三列</b> → AI 翻译修正规则（aaa原文 + bbb译文匹配 + ccc替换）</li>
         <li><b>CollData.json</b> → 自动解析 data[].data 数组</li>
       </ul>
       <p style="margin-top:4px;"><strong>📌 支持格式：</strong></p>
       <ul>
         <li><b>JSON:</b> {"原文": "译文"} 或 [["原文","译文"]]</li>
-        <li><b>CSV/TSV:</b> 两列=翻译规则，三列=AI Fix 规则</li>
+        <li><b>CSV/TSV:</b> 两列=翻译规则，三列=AI 翻译修正规则</li>
         <li><b>XLSX:</b> 第一行表头，后续行按列数自动判断</li>
       </ul>
     </div>

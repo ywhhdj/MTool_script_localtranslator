@@ -578,8 +578,9 @@ class Translator {
         twoColumnCount++;
       }
     }
-
-    console.log(`[MToolTranslatorPlugin][Upload] 采样 ${sampleSize} 行: 三列=${threeColumnCount}, 两列=${twoColumnCount}`);
+    if (config.debug) {
+      console.log(`[MToolTranslatorPlugin][Upload] 采样 ${sampleSize} 行: 三列=${threeColumnCount}, 两列=${twoColumnCount}`);
+    }
 
     // 判断结果
     const isAIFix = threeColumnCount > sampleSize * 0.6; // >60% 三列 → AI Fix
@@ -601,6 +602,7 @@ class Translator {
           }
         }
       }
+      aiFixRules.clear();
       aiFixRules.addRules(aiRules);
       aiFixCount = aiRules.length;
       logger.addLog(`AI Fix 规则加载成功: ${fileName}（${aiFixCount} 条）`, LogLevel.SUCCESS);
@@ -617,7 +619,10 @@ class Translator {
           const ccc = String(row[2]).trim();
           if (aaa && ccc) aiRules.push({ aaa, bbb, ccc, _isRegex: false });
         } else if (row.length >= 2 && row[1]) {
-          transRules.push({ source: String(row[0]).trim(), target: String(row[1]).trim() });
+          transRules.push({
+            source: String(row[0]).trim(),
+            target: String(row[1]).trim()
+          });
         }
       }
 
@@ -627,6 +632,7 @@ class Translator {
         this._rebuildBloom();
       }
       if (aiRules.length > 0) {
+        aiFixRules.clear();
         aiFixRules.addRules(aiRules);
       }
 
