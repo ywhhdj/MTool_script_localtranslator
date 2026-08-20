@@ -127,6 +127,10 @@ export function parseTSV(content: string): string[][] {
   return parseDelimited(content, '\t');
 }
 
+export function getGameName(): string{
+  return window.document.title;
+}
+
 // ==================== XLSX 解析 ====================
 
 export async function parseXLSX(file: File): Promise<string[][]> {
@@ -195,69 +199,66 @@ export function normalizeTranslationData(
 
   // 情况1: CollData.json 格式
   if (isCollDataFormat(data)) {
-    const keys = Object.keys(data);
-    let first = data[keys[0]];
-    for (const key of keys) {
-      const item = data[key];
-      if (item.type === "trs" && item.data && item.data.length > 0) {
-        first = item;
-        break;
-      }
-    }
-    if (first && typeof first === 'object' && 'data' in first && Array.isArray(first.data)) {
-      return parseCollData(data);
-    }
-    return [];
+    return parseCollData(data);
   }
 
   // 情况2/3: 二维/三维数组
   if (Array.isArray(data)) {
-    return data
-      .filter((row: any) => Array.isArray(row) && row.length >= 2)
-      .map((row: any[]) => {
-        const [src, pattern, tgt] = row;
-        if (row.length >= 3 && pattern) {
-          const regex = parseRegex(pattern);
-          return {
-            source: regex instanceof RegExp ? regex : src,
-            target: tgt || pattern,
-            regex: regex instanceof RegExp ? regex : undefined,
-          };
-        }
-        const regex = parseRegex(src);
-        return {
-          source: regex instanceof RegExp ? regex : src,
-          target: pattern,
-          regex: regex instanceof RegExp ? regex : undefined,
-        };
-      });
+    return parseArray(data);
   }
 
   // 对象格式 { "原文": "译文" }
   if (typeof data === 'object' && data !== null) {
-    const rules: Data.TranslationRule[] = [];
-    for (const [k, v] of Object.entries(data)) {
-      if (typeof v === 'string' && k && v) {
-        const parsed = parseRegex(k);
-        if (parsed instanceof RegExp) {
-          rules.push({
-            source: parsed,
-            target: v,
-            regex: parsed
-          });
-        } else {
-          rules.push({
-            source: k,
-            target: v
-          });
-        }
-      }
-    }
+    return parseJSON(data);
   }
   throw new Error(`无法识别的文件格式`);
 }
 
-function isCollDataFormat(data: any): boolean {
+export function parseJSON(data:any): TranslateDataNormalized {
+  const rules: Data.TranslationRule[] = [];
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v === 'string' && k && v) {
+      const parsed = parseRegex(k);
+      if (parsed instanceof RegExp) {
+        rules.push({
+          source: parsed,
+          target: v,
+          regex: parsed
+        });
+      } else {
+        rules.push({
+          source: k,
+          target: v
+        });
+      }
+    }
+  }
+  return rules;
+}
+
+export function parseArray(data: any[]): TranslateDataNormalized {
+  return data
+    .filter((row: any) => Array.isArray(row) && row.length >= 2)
+    .map((row: any[]) => {
+      const [src, pattern, tgt] = row;
+      if (row.length >= 3 && pattern) {
+        const regex = parseRegex(pattern);
+        return {
+          source: regex instanceof RegExp ? regex : src,
+          target: tgt || pattern,
+          regex: regex instanceof RegExp ? regex : undefined,
+        };
+      }
+      const regex = parseRegex(src);
+      return {
+        source: regex instanceof RegExp ? regex : src,
+        target: pattern,
+        regex: regex instanceof RegExp ? regex : undefined,
+      };
+    });
+}
+
+export function isCollDataFormat(data: any): boolean {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   // CollData.json: { "25045": { id, name, data: [[...], ...] } }
   const firstKey = Object.keys(data)[0];
@@ -291,38 +292,49 @@ type CollData = Record<string, {
   [key: string]: any
 }>
 
-function parseCollData(data: CollData): TranslateDataNormalized {
+export function parseCollData(data: CollData): TranslateDataNormalized {
   const rules: Data.TranslationRule[] = [];
-  for (const key of Object.keys(data)) {
+  const keys = Object.keys(data);
+  let first = data[keys[0]];
+  for (const key of keys) {
     const item = data[key];
-    if (item.type !== "trs") continue;
-    if (!item?.data || !Array.isArray(item.data)) continue;
-    for (const row of item.data) {
-      if (!Array.isArray(row)) continue;
-      // CollData 格式: [source, pattern/regex, target]
-      if (row.length >= 3 && row[0] && row[2]) {
-        const src = String(row[0]).trim();
-        const tgt = String(row[2]).trim();
-        if (src && tgt && !src.startsWith('【') && !src.startsWith('[')) {
-          // 检测是否为正则
-          if (typeof row[1] === 'string' && row[1].startsWith('/') && row[1].endsWith('/')) {
-            try {
-              const inner = row[1].slice(1, -1);
-              rules.push({
-                source: new RegExp(inner, 'g'),
-                target: tgt
-              });
-            } catch {
+    if (item.type === "trs" && item.data && item.data.length > 0) {
+      first = item;
+      break;
+    }
+  }
+  if (first && typeof first === 'object' && 'data' in first && Array.isArray(first.data)) {
+    for (const key of keys) {
+      const item = data[key];
+      if (item.type !== "trs") continue;
+      if (!item?.data || !Array.isArray(item.data)) continue;
+      for (const row of item.data) {
+        if (!Array.isArray(row)) continue;
+        // CollData 格式: [source, pattern/regex, target]
+        if (row.length >= 3 && row[0] && row[2]) {
+          const src = String(row[0]).trim();
+          const tgt = String(row[2]).trim();
+          if (src && tgt && !src.startsWith('【') && !src.startsWith('[')) {
+            // 检测是否为正则
+            if (typeof row[1] === 'string' && row[1].startsWith('/') && row[1].endsWith('/')) {
+              try {
+                const inner = row[1].slice(1, -1);
+                rules.push({
+                  source: new RegExp(inner, 'g'),
+                  target: tgt
+                });
+              } catch {
+                rules.push({
+                  source: src,
+                  target: tgt
+                });
+              }
+            } else {
               rules.push({
                 source: src,
                 target: tgt
               });
             }
-          } else {
-            rules.push({
-              source: src,
-              target: tgt
-            });
           }
         }
       }
@@ -365,9 +377,12 @@ export function safeJSONParse<T = any>(str: string): T | null {
   }
 }
 
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
 export function timestampFileName(prefix: string, ext: string): string {
   const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
   const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`;
   return `${prefix}_${ts}.${ext}`;
 }

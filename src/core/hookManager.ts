@@ -221,18 +221,11 @@ export function uninstallAllEngineHooks(): void {
 
 // ==================== RPG Maker 预翻译 ====================
 
-export function hookRPGMakerPreTranslate(
-  translator: {
-    translateSync: (text: string) => string
-  },
-  translateFn?: (...args: any[]) => any
-): void {
+export function hookRPGMakerPreTranslate(callback: (text: string) => string): void {
   if (typeof window.DataManager === 'undefined') {
     logger.addLog('DataManager 不可用，预翻译 Hook 跳过', LogLevel.WARNING);
     return;
   }
-
-  const fn = translateFn || ((text: string) => translator.translateSync(text));
 
   hookPrototype(
     'DataManager',
@@ -240,7 +233,7 @@ export function hookRPGMakerPreTranslate(
     function (this: any, _, ...args: any[]) {
       const object = args[0];
       if (object && typeof object === 'object') {
-        const translated = deepTranslateInPlace(object, fn);
+        const translated = deepTranslateInPlace(object, callback);
         if (Array.isArray(object) && Array.isArray(translated)) {
           object.length = 0;
           object.push(...translated);

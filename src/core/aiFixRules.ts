@@ -17,7 +17,7 @@
  *   ccc: 替换结果
  */
 
-import { getFileType, parseDelimited, parseRegex, parseXLSX, safeJSONParse } from '../utils';
+import { getFileType, getGameName, parseDelimited, parseRegex, parseXLSX, safeJSONParse, timestampFileName } from '../utils';
 import logger, { LogLevel } from './logger';
 
 // ==================== 类型定义 ====================
@@ -81,7 +81,10 @@ export function extractRules(data: any): AIFixRule[] {
       } else if (typeof value === 'string') {
         rules.push(makeRule(key, '', value));
       } else if (typeof value === 'object' && value !== null) {
-        const rule = parseRuleItem({ ...value, aaa: (value as any).aaa || key });
+        const rule = parseRuleItem({
+          ...value,
+          aaa: (value as any).aaa || key
+        });
         if (rule) rules.push(rule);
       }
     }
@@ -286,8 +289,6 @@ class AIFixRulesEngine {
     data: any;
     fileName: string
   } {
-    const d = new Date();
-    const ts = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
     const arr = this.rules.map(r => ({
       aaa: r.aaa instanceof RegExp ? `/${r.aaa.source}/${r.aaa.flags}` : r.aaa,
       bbb: r.bbb instanceof RegExp ? `/${r.bbb.source}/${r.bbb.flags}` : (r.bbb || ''),
@@ -295,7 +296,7 @@ class AIFixRulesEngine {
     }));
     return {
       data: arr,
-      fileName: `AIFixRules_${ts}.json`,
+      fileName: timestampFileName(`AIFixRules_${getGameName()}`, "json") ,
     };
   }
 
@@ -303,8 +304,6 @@ class AIFixRulesEngine {
     data: string[][];
     fileName: string
   } {
-    const d = new Date();
-    const ts = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
     const rows: string[][] = [['aaa', 'bbb', 'ccc']];
     for (const r of this.rules) {
       rows.push([
@@ -315,7 +314,7 @@ class AIFixRulesEngine {
     }
     return {
       data: rows,
-      fileName: `AIFixRules_${ts}.csv`
+      fileName: timestampFileName(`AIFixRules_${getGameName()}`, "csv")
     };
   }
 

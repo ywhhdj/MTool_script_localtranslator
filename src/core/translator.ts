@@ -11,7 +11,7 @@
 import config from '../config';
 import cache from './cache';
 import logger, { LogLevel } from './logger';
-import { installEngineHooks } from './hookManager';
+import { hookRPGMakerPreTranslate, installEngineHooks } from './hookManager';
 import aiTranslator from './aiTranslator';
 import aiFixRules, { type AIFixRule } from './aiFixRules';
 import {
@@ -26,6 +26,11 @@ import {
   isResourcePath,
   parseXLSX,
   parseDelimited,
+  getGameName,
+  timestampFileName,
+  parseCollData,
+  isCollDataFormat,
+  parseJSON,
 } from '../utils';
 import { Language } from '../typings/enum';
 import { TinyBloom } from './bloomFilter';
@@ -161,23 +166,19 @@ class Translator {
           }
         }
       );
-
-      // if (self.preTranslateEnabled) {
-      //   hookRPGMakerPreTranslate(self, (...args: any[]) => {
-      //     if (!args || args.length === 0) return args;
-      //     if (typeof args[0] !== 'string') return args;
-      //     return self.interceptText(args);
-      //   });
-      // }
+      if (self.preTranslateEnabled) {
+        hookRPGMakerPreTranslate((text) => {
+          if (!text || text.length === 0) return text;
+          if (typeof text !== 'string') return text;
+          return self.interceptText(text);
+        });
+      }
     }, 1000);
   }
 
   private static normalizePunctuation(text: string): string {
-    const punctuationMap: Record<string, string> = {
-      '…': '･･･',
-    };
     let result = text;
-    for (const [from, to] of Object.entries(punctuationMap)) {
+    for (const [from, to] of Object.entries(config.punctuation)) {
       result = result.split(from).join(to);
     }
     return result;
@@ -257,9 +258,9 @@ class Translator {
     text_=Translator.normalizePunctuation(text_);
 
     // 控制符分段翻译
-    if (this.CONTROL_REGEX.test(text_)) {
+    if (this.CONTROL_REGEX.test(rawText)) {
       this.CONTROL_REGEX.lastIndex = 0;
-      return this.translateWithControls(text_);
+      return this.translateWithControls(rawText);
     }
 
     // 3. 缓存查询
@@ -503,6 +504,8 @@ class Translator {
       if (!rawData) throw new Error('JSON 解析失败');
     } else if (ext === 'csv' || ext === 'tsv') {
       rawData = await readFileAsText(file);
+      const delimiter = ext === 'csv' ? ',' : '\t';
+      rawData = parseDelimited(rawData, delimiter); 
     } else if (ext === 'xlsx' || ext === 'xls') {
       rawData = await parseXLSX(file);
     } else {
@@ -521,9 +524,9 @@ class Translator {
     aiFixCount: number;
   } {
     // === CollData.json 格式检测 ===
-    if (this._isCollDataFormat(rawData)) {
+    if (isCollDataFormat(rawData)) {
       console.log(`[MToolTranslatorPlugin][Upload] 检测到 CollData.json 格式`);
-      const rules = this._parseCollData(rawData);
+      const rules = parseCollData(rawData);
       this._buildInto(this.userData, rules);
       this._mergeToRuntime();
       this._rebuildBloom();
@@ -550,12 +553,7 @@ class Translator {
 
     // === 对象格式 { "原文": "译文" } ===
     if (typeof rawData === 'object' && rawData !== null) {
-      const rules: Data.TranslationRule[] = [];
-      for (const [k, v] of Object.entries(rawData)) {
-        if (typeof v === 'string' && k && v) {
-          rules.push({ source: k, target: v });
-        }
-      }
+      const rules = parseJSON(rawData);
       if (rules.length > 0) {
         this._buildInto(this.userData, rules);
         this._mergeToRuntime();
@@ -680,47 +678,6 @@ class Translator {
     };
   }
 
-  // ==================== CollData 解析 ====================
-
-  private _isCollDataFormat(data: any): boolean {
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
-    // CollData.json: { "25045": { id, name, data: [[...], ...] } }
-    const firstKey = Object.keys(data)[0];
-    if (!firstKey) return false;
-    const firstVal = data[firstKey];
-    return firstVal && Array.isArray(firstVal.data) && firstVal.data.length > 0;
-  }
-
-  private _parseCollData(data: any): Data.TranslationRule[] {
-    const rules: Data.TranslationRule[] = [];
-    for (const key of Object.keys(data)) {
-      const item = data[key];
-      if (!item?.data || !Array.isArray(item.data)) continue;
-      for (const row of item.data) {
-        if (!Array.isArray(row)) continue;
-        // CollData 格式: [source, pattern/regex, target]
-        if (row.length >= 3 && row[0] && row[2]) {
-          const src = String(row[0]).trim();
-          const tgt = String(row[2]).trim();
-          if (src && tgt && !src.startsWith('【') && !src.startsWith('[')) {
-            // 检测是否为正则
-            if (typeof row[1] === 'string' && row[1].startsWith('/') && row[1].endsWith('/')) {
-              try {
-                const inner = row[1].slice(1, -1);
-                rules.push({ source: new RegExp(inner, 'g'), target: tgt });
-              } catch {
-                rules.push({ source: src, target: tgt });
-              }
-            } else {
-              rules.push({ source: src, target: tgt });
-            }
-          }
-        }
-      }
-    }
-    return rules;
-  }
-
   // ==================== 文件加载（兼容旧接口）====================
 
   async loadTranslationData(fileName: string) {
@@ -823,8 +780,12 @@ class Translator {
     return result;
   }
 
-  isPreTranslated(): boolean { return this.preTranslated; }
-  setPreTranslateEnabled(enabled: boolean) { this.preTranslateEnabled = enabled; }
+  get isPreTranslated(): boolean {
+    return this.preTranslated;
+  }
+  setPreTranslateEnabled(enabled: boolean) {
+    this.preTranslateEnabled = enabled;
+  }
 
   // ==================== AI 批量翻译 ====================
 
@@ -875,6 +836,7 @@ class Translator {
 
   private _saveTranslationData() {
     if (!config.user.autoLoad.userConfig) return;
+    localStorage.clear();
     const data = {
       exactMap: Array.from(this.userData.exactMap.entries()),
       regexRules: this.userData.regexRules.map(r => ({
@@ -917,9 +879,10 @@ class Translator {
     };
   }
 
-  exportTranslationData(format: "json" | "csv" = "json"): { data: any; fileName: string } {
-    const d = new Date();
-    const ts = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  exportTranslationData(format: "json" | "csv" = "json"): {
+    data: any;
+    fileName: string
+  } {
 
     const allExact = new Map<string, string>();
     for (const [k, v] of cache.exportEntries()) {
@@ -931,7 +894,7 @@ class Translator {
       for (const [k, v] of allExact) obj[k] = v;
       return {
         data: obj,
-        fileName: `MTool_Export_${ts}.json`
+        fileName: timestampFileName(`Translation_${getGameName()}`,"json")
       };
     }
 
@@ -940,7 +903,7 @@ class Translator {
       for (const [k, v] of allExact) rows.push([k, v]);
       return {
         data: rows,
-        fileName: `MTool_Export_${ts}.csv`
+        fileName: timestampFileName(`Translation_${getGameName()}`, "csv")
       };
     }
 
@@ -948,7 +911,7 @@ class Translator {
     for (const [k, v] of allExact) rows.push([k, v]);
     return {
       data: rows,
-      fileName: `MTool_Export_${ts}.tsv`
+      fileName: timestampFileName(`Translation_${getGameName()}`, "tsv")
     };
   }
 

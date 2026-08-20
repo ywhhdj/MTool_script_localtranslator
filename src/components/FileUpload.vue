@@ -6,7 +6,8 @@ import config from '../config';
 import {
   getFileType,
   timestampFileName,
-  download
+  download,
+  getGameName
 } from '../utils';
 import Icon from './Icon.vue';
 import cache from '../core/cache';
@@ -98,7 +99,7 @@ const exportAIFixRules = async (format: 'json' | 'csv' = 'json') => {
 
 const exportLogs = async () => {
   const text = logger.exportLogs();
-  const fileName = timestampFileName('MTool_Logs', 'txt');
+  const fileName = timestampFileName(`Logs_${getGameName()}`, 'txt');
   await download(text, fileName, 'txt');
 };
 

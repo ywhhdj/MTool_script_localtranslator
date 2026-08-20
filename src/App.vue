@@ -50,7 +50,7 @@ const toggle = () => { show.value = !show.value; };
 onMounted(() => {
   setTimeout(() => {
     scanRPGMakerDialog((texts: Set<string>) => {
-      if (texts && texts.size > 0 && translator.isPreTranslated() === false) {
+      if (texts && texts.size > 0 && translator.isPreTranslated === false) {
         isPreTranslating.value = true;
         setTimeout(() => {
           try {
@@ -137,7 +137,7 @@ const runPreTranslate = () => {
   }
   const allTexts = new Set<string>();
   for (const key of Object.keys(window.$data || {})) {
-    const data = (window.$data as any)[key];
+    const data = window.$data[key];
     if (data) collectTexts(data, allTexts);
   }
   if (allTexts.size > 0) {
