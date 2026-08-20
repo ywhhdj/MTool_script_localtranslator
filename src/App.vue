@@ -6,6 +6,7 @@ import { uninstallAllEngineHooks } from './core/hookManager';
 import Icon, { type IconType } from './components/Icon.vue';
 import config from './config';
 import { safeJSONParse } from './utils';
+import cache from './core/cache';
 
 type Tab = 'files' | 'settings' | 'logs' | 'stats' | 'moot';
 const show = ref(false);
@@ -71,7 +72,7 @@ onUnmounted(() => {
   uninstallAllEngineHooks();
 });
 
-const stats = computed(() => translator.stats);
+const translateCount = computed(() => cache.size);
 
 // ==================== 引擎开关动态监听 ====================
 watch(
@@ -196,13 +197,13 @@ const keepAliveInclude = computed(() => Object.keys(components).join(','));
     <span class="trigger-icon">译</span>
     <span
       class="trigger-badge"
-      v-if="stats.rules > 0"
-    >{{ stats.rules }}</span>
-    <span
+      v-if="translateCount > 0"
+    >{{ translateCount }}</span>
+    <!-- <span
       class="trigger-badge pretrans"
-      v-if="stats.preTranslated"
+      v-if="cache.preTranslated"
       title="预翻译已完成"
-    >✓</span>
+    >✓</span> -->
   </div>
 
   <!-- 主面板 -->
@@ -221,11 +222,11 @@ const keepAliveInclude = computed(() => Object.keys(components).join(','));
       <!-- 标题栏 -->
       <div class="mtool-header">
         <span class="mtool-title">🛠 MTool 翻译引擎</span>
-        <span
+        <!-- <span
           class="optimize-badge"
           v-if="stats.preTranslated"
           title="预翻译已生效"
-        >⚡预翻译</span>
+        >⚡预翻译</span> -->
         <div
           class="mtool-close"
           @click="toggle"

@@ -49,9 +49,9 @@ class Translator {
   };
 
   isCustomConfig: boolean = true;
-  private _skipSingleCharRegex: RegExp = /^[%^&*()_+･\-=\[\]{};':"\\|,.<>\/?`~♪一!@#$♡。，、；：？！…—～（）｛｝【】《》￥$€£¥¢]+$/;
+  private ONLY_PUNCTUATION: RegExp = /^[\s%^&*()_+･\-=\[\]{};':"\\|,.<>\/?`~♪!@#$♡。，、；：？！…—～（）｛｝【】《》￥$€£¥¢·・…‥〃〆々〰]+$/;
   private CONTROL_REGEX: RegExp = /\\[A-Za-z](?:\[[^\]]*\])?|\x1b\[[\d;]*[A-Za-z]/g;
-  private ALL_CONTROL_CHARS: RegExp = /^\\[A-Za-z](?:\[[^\]]*\])?$|^\x1b\[[\d;]*[A-Za-z]$/g;
+  private ALL_CONTROL_CHARS: RegExp = /^\\[A-Za-z](?:\[[^\]]*\])?$|^\x1b\[[\d;]*[A-Za-z]$/;
   private defaultSkipRules: RegExp | null = null;
   private missStreak: number = 0;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -172,6 +172,17 @@ class Translator {
     }, 1000);
   }
 
+  private static normalizePunctuation(text: string): string {
+    const punctuationMap: Record<string, string> = {
+      '…': '･･･',
+    };
+    let result = text;
+    for (const [from, to] of Object.entries(punctuationMap)) {
+      result = result.split(from).join(to);
+    }
+    return result;
+  }
+
   // ==================== 数据构建 ====================
 
   private _buildInto(target: Data.TranslationData, rules: Data.TranslationRule[]) {
@@ -182,10 +193,14 @@ class Translator {
     }> = [];
 
     for (const rule of rules) {
-      if (typeof rule.source === 'string') {
-        exactMap.set(rule.source, rule.target);
-      } else if (rule.source instanceof RegExp) {
-        regexRules.push({ pattern: rule.source, replacement: rule.target });
+      const source = typeof rule.source === 'string'
+        ? Translator.normalizePunctuation(rule.source)
+        : rule.source;
+      const target = Translator.normalizePunctuation(rule.target);
+      if (typeof source === 'string') {
+        exactMap.set(source, target);
+      } else if (source instanceof RegExp) {
+        regexRules.push({ pattern: source, replacement: target });
       }
     }
 
@@ -229,7 +244,7 @@ class Translator {
     if (typeof text !== 'string') return text;
 
     const rawText = String.raw`${text.trim()}`;
-    const text_ = stripControlChars(rawText);
+    let text_ = stripControlChars(rawText);
 
     if (
       !text_ ||
@@ -237,15 +252,14 @@ class Translator {
       text_.length > 500 ||
       this.isSkip(text_)   // 跳过检查
     ) {
-      if (config.debug) {
-        console.log("跳过翻译", text);
-      }
       return text;
     }
+    text_=Translator.normalizePunctuation(text_);
+
     // 控制符分段翻译
-    if (this.CONTROL_REGEX.test(text)) {
+    if (this.CONTROL_REGEX.test(text_)) {
       this.CONTROL_REGEX.lastIndex = 0;
-      return this.translateWithControls(text);
+      return this.translateWithControls(text_);
     }
 
     // 3. 缓存查询
@@ -256,16 +270,17 @@ class Translator {
 
     // 4. 规则翻译
     const result = this.doFix(text_);
-    if (config.debug) {
-      console.log("规则翻译", text, result);
-    }
+
     if (result !== text_) {
       this.addCache(text_, result);
       return result;
     }
+    if (config.debug) {
+      console.log("未翻译文本", text_.length>50?text_.slice(0,50)+"...":text_);
+    }
 
     // 5. 未命中 → 忽略 + 触发 AI
-    cache.addIgnore(text);
+    cache.addIgnore(text_);
     this.missStreak++;
     if (aiTranslator.isAvailable) {
       const threshold = config.user.aiTriggerThreshold.userConfig ?? 5;
@@ -288,7 +303,6 @@ class Translator {
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
-    // 重置正则 lastIndex
     this.CONTROL_REGEX.lastIndex = 0;
 
     while ((match = this.CONTROL_REGEX.exec(text)) !== null) {
@@ -351,9 +365,9 @@ class Translator {
   // ==================== 跳过判断 ====================
 
   private isSkip(text: string): boolean {
-    if (this._skipSingleCharRegex.test(text)) return true;
-    if (this.defaultSkipRules?.test(text)) return true;
     if (this.ALL_CONTROL_CHARS.test(text)) return true;
+    if (this.ONLY_PUNCTUATION.test(text)) return true;
+    if (this.defaultSkipRules?.test(text)) return true;
     return this.isTargetLanguage(text);
   }
 
