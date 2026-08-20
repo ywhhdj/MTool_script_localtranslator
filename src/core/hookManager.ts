@@ -1,11 +1,3 @@
-/**
- * hookManager.ts — 统一引擎 Hook 安装/卸载管理
- *
- * 修复（Bug 修复）：
- *  - 引擎开关关闭时，调用对应的 uninstallHook 还原原型方法
- *  - 开关状态变更时动态安装/卸载（无需刷新页面）
- *  - 增加 console.log 调试输出
- */
 import logger, { LogLevel } from './logger';
 import {
   hookBitmap,

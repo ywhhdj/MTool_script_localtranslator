@@ -1,14 +1,3 @@
-/**
- * websocket.ts — 统一 WebSocket Hook 实现
- *
- * 修复（Bug 修复）：
- *  - 删除根目录 wsHook.ts（与 mootHook.ts 重复）
- *  - 统一 pendingMap 管理
- *  - 增加 console.log 调试输出
- *  - 资源路径/非目标 WS 连接直接放行
- *  - 支持完整还原（uninstall）
- */
-
 import logger, { LogLevel } from '../logger';
 import translator from '../translator';
 import { isResourcePath, safeJSONParse } from '../../utils';

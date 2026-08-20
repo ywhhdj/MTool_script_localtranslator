@@ -1,13 +1,3 @@
-/**
- * translator.ts — 翻译引擎核心（修复版）
- *
- * 修复（Bug 修复）：
- *  - doFix() 中 `let data=null` 缺少 let/const 关键字
- *  - 新增 loadUniversalFile() 统一上传入口
- *  - 自动区分两列（翻译规则）/ 三列（AI Fix 规则）/ CollData.json
- *  - 修正 isSkip 对日文标点误判
- */
-
 import config from '../config';
 import cache from './cache';
 import logger, { LogLevel } from './logger';
@@ -496,7 +486,6 @@ class Translator {
   }> {
     const ext = getFileType(file.name);
     let rawData: any;
-
     // ---- 读取文件 ----
     if (ext === 'json') {
       const text = await readFileAsText(file);
@@ -524,7 +513,7 @@ class Translator {
     aiFixCount: number;
   } {
     // === CollData.json 格式检测 ===
-    if (isCollDataFormat(rawData)) {
+    if (ext=="json" && isCollDataFormat(rawData)) {
       console.log(`[MToolTranslatorPlugin][Upload] 检测到 CollData.json 格式`);
       const rules = parseCollData(rawData);
       this._buildInto(this.userData, rules);
@@ -539,12 +528,12 @@ class Translator {
     }
 
     // === 数组格式：判断两列 vs 三列 ===
-    if (Array.isArray(rawData)) {
+    if ((ext=="csv"||ext=="tsv") && Array.isArray(rawData)) {
       return this._classifyAndLoad(rawData, fileName);
     }
 
     // === 对象格式 { "原文": "译文" } ===
-    if (typeof rawData === 'object' && rawData !== null) {
+    if (ext=="json" && typeof rawData === 'object' && rawData !== null) {
       const rules = parseJSON(rawData);
       if (rules.length > 0) {
         this._buildInto(this.userData, rules);

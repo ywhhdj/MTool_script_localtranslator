@@ -1,9 +1,5 @@
 /**
- * aiFixRules.ts — AI 翻译后修正规则引擎（修复版）
- *
- * 修复（Bug 修复）：
- *  - 新增 removeRule(index) 方法，避免"清空全部再逐个加回"的低效操作
- *  - 统一规则解析逻辑
+ * aiFixRules.ts — AI 翻译后修正规则
  *
  * 核心概念：
  *   MTool 平台内置 AI 翻译通过 WebSocket 发送原文，返回 AI 翻译结果。

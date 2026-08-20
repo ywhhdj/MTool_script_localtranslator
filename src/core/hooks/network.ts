@@ -1,14 +1,3 @@
-/**
- * network.ts — Fetch / XHR 通用拦截
- *
- * 修复（Bug 修复）：
- *  - hookFetch 盲目 response.clone().json() 导致图片/字体/音频等二进制资源损坏
- *  - 新增 isResourcePath 检测，资源路径直接放行
- *  - 响应替换时保留原始 status / content-type
- *  - 改为通用函数：接收 shouldIntercept / transformRequest / transformResponse 钩子
- *  - 增加 console.log 调试输出
- */
-
 import config from '../../config';
 import { isResourcePath, safeJSONParse } from '../../utils';
 import logger, { LogLevel } from '../logger';

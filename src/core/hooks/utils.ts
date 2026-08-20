@@ -1,13 +1,5 @@
-/**
- * Hook 工具函数 — 统一方法劫持/还原
- *
- * 修复（Bug 修复）：
- *  - uninstallHook 原路径是 (window)[className][methodName]，
- *    但安装时挂的是 prototype，还原也必须走 prototype
- *  - 增加 installHook / uninstallHook 的调试日志
- *  - 支持引擎开关关闭时正确还原原函数
- */
 import logger, { LogLevel } from '../logger';
+
 const originalMethods = new Map<string, { className: string; methodName: string; original: any }>();
 
 /**

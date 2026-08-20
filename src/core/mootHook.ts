@@ -1,22 +1,9 @@
-/**
- * mootHook.ts — Moot 平台 AI 翻译 Hook（重构版）
- *
- * 修复（Bug 修复）：
- *  - 消除与 wsHook.ts / hooks/websocket.ts 的重复实现
- *  - 改为组合使用统一的 WebSocketHook 类
- *  - 修复 pendingMap → this.pendingRequests 引用错误
- *  - 三列规则 (aaa/bbb/ccc) 正确解析
- *  - 增加 console.log 调试输出
- */
-
 import logger, { LogLevel } from './logger';
 import { WebSocketHook } from './hooks/websocket';
 import translator from './translator';
 import aiFixRules, { type AIFixRule } from './aiFixRules';
 import config from '../config';
 import { safeJSONParse, xhrRequest } from '../utils';
-
-// ==================== 类型 ====================
 
 export interface MootRule {
   aaa: string | RegExp;
@@ -35,8 +22,6 @@ type MootStats = {
   responsesLearned: number;
   cacheHitRate: string;
 }
-
-// ==================== 主类 ====================
 
 class MootHookManager {
   private wsHook: WebSocketHook | null = null;

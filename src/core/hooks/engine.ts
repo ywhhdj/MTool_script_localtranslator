@@ -1,13 +1,3 @@
-/**
- * engine.ts — 游戏引擎 Hook 集合
- *
- * 修复（Bug 修复）：
- *  - hookRPGMaker 中 try { args[0] = String(args[0]); } 缺少闭合括号
- *  - 各 hook 增加开关关闭时的 uninstall 调用
- *  - 增加 console.log 调试输出
- *  - Bitmap.drawText 防止非字符串参数崩溃
- */
-
 import config from '../../config';
 import logger, { LogLevel } from '../logger';
 import { hookPrototype, uninstallHook } from './utils';
