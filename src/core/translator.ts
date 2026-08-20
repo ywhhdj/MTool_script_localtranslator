@@ -540,14 +540,6 @@ class Translator {
 
     // === 数组格式：判断两列 vs 三列 ===
     if (Array.isArray(rawData)) {
-      // CSV/TSV 文本 → 先解析
-      if (typeof rawData === 'string' || (rawData.length > 0 && typeof rawData[0] === 'string')) {
-        const delimiter = ext === 'csv' ? ',' : (ext === 'tsv' ? '\t' : ',');
-        if (typeof rawData === 'string') {
-          rawData = parseDelimited(rawData, delimiter);
-        }
-      }
-
       return this._classifyAndLoad(rawData, fileName);
     }
 
