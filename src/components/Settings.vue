@@ -123,7 +123,8 @@ const changeEngine = (checked: boolean, eng: EngineType) => {
         <input
           type="text"
           v-model="user.transengine.userConfig"
-          placeholder="Bing"
+          :placeholder="user.transengine.default"
+          :disabled="false"
         >
       </label>
 
@@ -132,7 +133,8 @@ const changeEngine = (checked: boolean, eng: EngineType) => {
         <input
           type="text"
           v-model="user.translatorName.userConfig"
-          placeholder="常规通用性修正"
+          :placeholder="user.translatorName.default"
+          :disabled="false"
         >
       </label>
 

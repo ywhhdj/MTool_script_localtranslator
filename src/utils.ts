@@ -267,6 +267,7 @@ export function isCollDataFormat(data: any): boolean {
   return firstVal && Array.isArray(firstVal.data) && firstVal.data.length > 0;
 }
 
+
 type CollData = Record<string, {
   id: number,
   data: string | string[][],
@@ -275,7 +276,7 @@ type CollData = Record<string, {
   desc: string,
   lang: number,
   slang: number,
-  transengine: "Bing",
+  transengine: string,
   gameengine: string,
   public: number,
   createdate: number,
