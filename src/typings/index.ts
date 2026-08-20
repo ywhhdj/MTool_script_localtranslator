@@ -1,21 +1,31 @@
-import { EngineType, FileFormat, Language } from "./enum";
+import { EngineType, Language } from "./enum";
 
 export type UserConfig = {
-  fileName: Config.UserConfigItem<string>;
-  autoLoad: Config.UserConfigItem<boolean>;
-  transengine: Config.UserConfigItem<string>;
-  translatorName: Config.UserConfigItem<string>;
-  targetLang: Config.UserConfigItem<Language>;
-  AI_BASE_URL: Config.UserConfigItem<string>;
-  AI_KEY: Config.UserConfigItem<string>;
-  model: Config.UserConfigItem<string>;
-  maxReplaceCount: Config.UserConfigItem<number>;
-  maxCacheSize: Config.UserConfigItem<number>;
-  maxLogCount: Config.UserConfigItem<number>;
-  enableAI: Config.UserConfigItem<boolean>;
-  aiTriggerThreshold: Config.UserConfigItem<number>;
-  engines: Config.UserConfigItem<Record<EngineType, boolean>>;
-  exportFormat: Config.UserConfigItem<FileFormat>;
+  fileName: Options.UserConfigItem<string>;
+  autoLoad: Options.UserConfigItem<boolean>;
+  transengine: Options.UserConfigItem<string>;
+  translatorName: Options.UserConfigItem<string>;
+  targetLang: Options.UserConfigItem<Language>;
+  AI_BASE_URL: Options.UserConfigItem<string>;
+  AI_KEY: Options.UserConfigItem<string>;
+  model: Options.UserConfigItem<string>;
+  maxReplaceCount: Options.UserConfigItem<number>;
+  maxCacheSize: Options.UserConfigItem<number>;
+  maxLogCount: Options.UserConfigItem<number>;
+  enableAI: Options.UserConfigItem<boolean>;
+  aiTriggerThreshold: Options.UserConfigItem<number>;
+  engines: Options.UserConfigItem<Record<EngineType, boolean>>;
+  exportFormat: Options.UserConfigItem<"json" | "csv">;
+  hookWebSocket: Options.UserConfigItem<boolean>;
+  wsTargetURL: Options.UserConfigItem<string>;
+  wsEnableRequestFix: Options.UserConfigItem<boolean>;
+  wsEnableResponseFix: Options.UserConfigItem<boolean>;
+  aiFixExportFormat: Options.UserConfigItem<"json" | "csv">;
+  mootHookEnabled: Options.UserConfigItem<boolean>;
+  mootApiUrl: Options.UserConfigItem<string>;
+  mootInterceptRequest: Options.UserConfigItem<boolean>;
+  mootProcessResponse: Options.UserConfigItem<boolean>,
+  mootDebug: Options.UserConfigItem<boolean>;
 }
 
 export type AppOptions = {

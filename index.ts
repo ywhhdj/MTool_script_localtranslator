@@ -1,16 +1,14 @@
 import { createApp } from 'vue';
 import App from './src/App.vue';
-import { install } from './src/main';
 import "./src/main.css";
+import './src/main';
 
-const DEBUG = false;
-if (!DEBUG) {
-  let div = document.getElementById('mtool-translator-plugin-app');
-  if (!div) {
-    div = document.createElement('div');
-    div.id = 'mtool-translator-plugin-app';
-    document.body.appendChild(div);
-  }
+const mountId = 'mtool-translator-plugin-app';
+let mountEl = document.getElementById(mountId);
+if (!mountEl) {
+  mountEl = document.createElement('div');
+  mountEl.id = mountId;
+  mountEl.style.all = 'initial';
+  document.body.appendChild(mountEl);
 }
-createApp(App).mount('#mtool-translator-plugin-app');
-install();
+createApp(App).mount(`#${mountId}`);

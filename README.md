@@ -1,158 +1,308 @@
-# MTool 本地翻译插件 v0.1.0
+# MTool 翻译引擎 v0.2.0
 
-高性能、多引擎、支持 AI 翻译回退的本地化翻译插件，专为游戏汉化/本地化场景设计。
+## 新增功能：Moot 平台 AI 翻译 Hook
 
-## ✨ 特性
+拦截 Moot 平台内置 AI 翻译请求（`http://127.0.0.1:64002/wslikecmd`），在请求和响应阶段做智能处理。
 
-- **多引擎支持** — RPG Maker / PixiJS / Cocos2d-js / Canvas 2D / Bitmap / WebSocket / Fetch / XHR
-- **多格式文件** — JSON / CSV / TSV / XLSX 导入导出，拖拽上传
-- **AI 翻译回退** — 兼容 OpenAI / DeepSeek / 任何 OpenAI 兼容 API
-- **高性能缓存** — 三级快速缓存 + LRU 淘汰 + 防抖持久化
-- **实时统计** — 规则数、缓存命中率、AI 状态一目了然
-- **TypeScript** — 全类型化，开发体验友好
+---
 
-## 📁 项目结构
+## 工作流程
 
 ```
-src/
-├── main.ts                  # 入口，自动初始化 + 全局 API
-├── config.ts                # 类型化配置管理
-├── utils.ts                 # 工具函数（文件解析、正则、防抖等）
-├── App.vue                  # 主面板（可拖拽/折叠/Tab）
-├── components/
-│   ├── FileUpload.vue       # 拖拽上传 + 文件管理
-│   ├── Settings.vue         # 设置面板（基本/引擎/AI）
-│   ├── Logger.vue           # 增强日志（过滤/搜索/导出）
-│   └── Stats.vue            # 实时统计面板
-└── core/
-    ├── translator.ts        # 核心翻译引擎
-    ├── cache.ts             # 高性能缓存系统
-    ├── hook.ts              # 多引擎 Hook 统一接口
-    ├── logger.ts            # 响应式日志系统
-    └── aiTranslator.ts      # AI 翻译模块
+游戏 ──POST {cmd:"trs", args:[日文原文]}──▶ Moot API
+                                              │
+                    ┌─ mootHook 拦截请求 ─┤
+                    │                         │
+                    │  ① 本地翻译命中?     │
+                    │     ├─ 是 → 伪造响应，跳过 AI ✅
+                    │     └─ 否 → 放行，发真实请求
+                    │                         │
+                    │  ② 收到 AI 响应       │
+                    │     → aiFixRules.fix() 后修正
+                    │     → 替换 ret 字段     │
+                    │                         │
+                    ▼                         ▼
+              本地翻译结果           修正后的 AI 译文
 ```
 
-## 🚀 快速开始
+---
 
-### 1. 安装
+## 快速开始
 
-将 `src/` 目录复制到你的项目中，确保构建工具（Vite/Webpack/Rollup）能处理 `.vue` 和 `.ts` 文件。
+### 方式一：自动安装（推荐）
 
-### 2. 引入
-
-```html
-<!-- 在你的游戏页面中引入 -->
-<script src="path/to/MToolTranslatorPlugin.iife.js"></script>
+```js
+// main.ts 中已自动调用
+mootHook.autoInstall({
+  apiUrl: 'http://127.0.0.1:64002/wslikecmd'  // 可选，有默认值
+});
 ```
 
-或在模块中：
+启动游戏后 Moot Hook 会自动检测并安装，无需手动操作。
 
-```javascript
-import './src/main';
+### 方式二：手动安装
+
+```js
+// 通过全局 API
+MToolTranslatorPlugin.moot.install({
+  apiUrl: 'http://127.0.0.1:64002/wslikecmd',
+  interceptRequest: true,   // 请求阶段本地翻译拦截
+  processResponse: true,     // 响应阶段 AI 译文后修正
+  debug: false,              // 控制台输出调试信息
+});
 ```
 
-### 3. 使用
+### 方式三：UI 面板
 
-插件会自动初始化并挂载到页面右下角。点击 **「译」** 按钮打开面板。
+点击 MTool 面板 → **Moot** Tab → 打开开关即可。
 
-## 📖 API 文档
+---
 
-通过 `window.MToolTranslatorPlugin` 访问全部功能：
+## 后处理规则 (aaa / bbb / ccc)
 
-```javascript
-// 加载翻译文件
-MTool.load('translations.json');
-MTool.load(fileObject); // File 对象
+### 规则逻辑
 
-// 导出翻译数据
-MTool.export('json');  // 'json' | 'csv' | 'tsv'
-MTool.export();         // 默认 json
+| 字段 | 含义 | 示例 |
+|------|------|------|
+| **aaa** | 原文匹配模式（字符串或正则） | `あははっ情報ありがとう` 或 `/情報/` |
+| **bbb** | AI 译文中需包含的文本（过滤条件，可空） | `谢谢` 或 `/谢[谢谢]/` |
+| **ccc** | 替换结果 | `啊哈哈 谢谢啦♪` |
 
-// 查看统计
-MTool.stats();
-// → { rules: 1234, cacheSize: 567, cacheHitRate: 87.5, ... }
+### 匹配流程
 
-// 重置所有数据
-MTool.reset();
-
-// AI 翻译
-MTool.testAI();
-MTool.clearAICache();
-
-// 日志
-MTool.log('自定义消息', 'info'); // 'info' | 'success' | 'warning' | 'error'
+```
+收到 AI 响应: { ret: "啊哈哈 谢谢情报♪" }
+                    │
+                    ▼
+        遍历后处理规则（aiFixRules）
+                    │
+        ┌─ aaa 匹配原文？ ── 否 → 跳过
+        │
+        └─ 是 → bbb 在 ret 中？
+                    │
+            ┌─ 有 bbb → ret 包含 bbb？
+            │       ├─ 是 → ret 中 bbb 替换为 ccc ✅
+            │       └─ 否 → 跳过
+            │
+            └─ bbb 为空 → 直接替换 ✅
 ```
 
-## ⚙️ 配置说明
+### 规则示例
 
-### 翻译文件格式
+```js
+// 例1：精确匹配 + 精确过滤
+MToolTranslatorPlugin.moot.addRule(
+  'あははっ情報ありがとう♪',          // aaa: 原文
+  '谢谢情报',                              // bbb: AI 译文中的特征文本
+  '啊哈哈 谢谢啦♪'                        // ccc: 替换结果
+);
 
-**JSON 格式（键值对）：**
+// 例2：正则匹配原文 + 正则过滤
+MToolTranslatorPlugin.moot.addRule(
+  '/\\d+日目/',                            // aaa: 匹配 "1日目"~"9日目"
+  '/第\\d+天/',                            // bbb: AI 译文包含 "第N天"
+  '第$1日'                                // ccc: 替换为 "第N日"
+);
+
+// 例3：仅做替换，不过滤（bbb = null）
+MToolTranslatorPlugin.moot.addRule(
+  '情報',                                 // aaa
+  null,                                    // bbb: 不过滤
+  '情报'                                   // ccc: 直接替换
+);
+```
+
+---
+
+## 支持的规则文件格式
+
+### JSON 格式
+
 ```json
-{
-  "原文1": "译文1",
-  "/正则模式/": "译文2",
-  "常時ダッシュ": "保持冲刺状态"
-}
+[
+  {
+    "aaa": "あははっ情報ありがとう♪",
+    "bbb": "谢谢情报",
+    "ccc": "啊哈哈 谢谢啦♪"
+  },
+  {
+    "aaa": "/\\d+日目/",
+    "bbb": "/第\\d+天/",
+    "ccc": "第$1日"
+  }
+]
 ```
 
-**CSV/TSV 格式：**
+### CSV 格式（三列：aaa,bbb,ccc）
+
 ```csv
-source,target
-常時ダッシュ,保持冲刺状态
-ニューゲーム,开始游戏
+aaa,bbb,ccc
+あははっ情報ありがとう♪,谢谢情报,啊哈哈 谢谢啦♪
+/\d+日目/,/第\d+天/,第$1日
+情報,,情报
 ```
 
-**CollData.json 格式（MTool 社区格式）：**
+### TSV 格式（三列，Tab 分隔）
+
+```tsv
+aaa	bbb	ccc
+あははっ情報ありがとう♪	谢谢情报	啊哈哈 谢谢啦♪
+```
+
+### CollData.json 格式
+
 ```json
 {
-  "namespace": {
-    "name": "常规通用性修正",
+  "rule1": {
+    "name": "通用修正",
     "transengine": "Bing",
     "data": [
-      ["原文", "译文"],
-      ["/正则/", "译文"]
+      ["あははっ情報ありがとう♪", "谢谢情报", "啊哈哈 谢谢啦♪"],
+      ["/\d+日目/", "/第\d+天/", "第$1日"]
     ]
   }
 }
 ```
 
-### AI 翻译配置
+### 加载规则文件
 
-在设置面板 → AI翻译 Tab 中填写：
+```js
+// UI：Moot 面板 → 「加载规则文件」按钮
+// 或代码：
+const file = document.getElementById('fileInput').files[0];
+MToolTranslatorPlugin.moot.loadRules(file);
+```
 
-| 配置项 | 说明 | 示例 |
-|--------|------|------|
-| AI API Key | 你的 API 密钥 | `sk-xxxxxx` |
-| AI Base URL | API 地址 | `https://api.deepseek.com` |
-| 模型 | 模型名称 | `deepseek-chat` |
-| 触发阈值 | 连续未命中多少条后触发 AI | `5` |
+---
 
-支持的 API：OpenAI、DeepSeek、智谱AI、Moonshot、任何 OpenAI 兼容接口。
+## API 参考
 
-## 🔧 引擎开关
+### MToolTranslatorPlugin.moot
 
-在设置面板 → 引擎 Tab 中，可独立开关每个引擎 Hook：
+| 方法 | 说明 |
+|------|------|
+| `.install(opts?)` | 安装 Hook（fetch + XHR 双管齐下） |
+| `.autoInstall(opts?)` | 自动安装（带重试检测，适合启动时调用） |
+| `.uninstall()` | 卸载 Hook，恢复原始 fetch/XHR |
+| `.loadRules(file)` | 从文件加载后处理规则（JSON/CSV/TSV/XLSX） |
+| `.addRule(aaa, bbb, ccc)` | 添加单条规则（bbb 可为 null） |
+| `.clearRules()` | 清除所有后处理规则 |
+| `.stats()` | 获取统计信息 |
+| `.resetStats()` | 重置统计 |
+| `.updateConfig(opts)` | 更新配置 |
+| `.test(text)` | 手动测试翻译 |
 
-- **RPG Maker** — MV/MZ 文本渲染
-- **PixiJS** — PIXI.Text / BitmapText
-- **Cocos2d-js** — cc.Label
-- **Canvas 2D** — fillText / strokeText / measureText
-- **Bitmap** — Bitmap.drawText
-- **WebSocket / Fetch / XHR** — 网络层拦截
+### 统计字段
 
-## 📊 性能优化
+```js
+MToolTranslatorPlugin.moot.stats();
+// →
+{
+  enabled: true,
+  installed: true,
+  requestsSeen: 156,          // 见到的 Moot 请求总数
+  requestsIntercepted: 42,     // 本地翻译命中，未发 AI 请求
+  responsesSeen: 114,         // 见到的 AI 响应总数
+  responsesFixed: 23,         // aiFixRules 成功修正的次数
+  localHitRate: '26.9%'        // 本地命中率
+}
+```
 
-| 优化项 | 说明 |
-|--------|------|
-| 三级快速缓存 | 最近 3 条 O(1) 命中，无需哈希计算 |
-| LRU 淘汰 | 热点数据保护，按访问频率排序 |
-| 防抖持久化 | 缓存保存延迟 2s，减少 localStorage 写入 |
-| 正则预排序 | 长规则优先匹配，减少无效遍历 |
-| 忽略集合 | 已确认无需翻译的文本直接跳过 |
-| 批量 AI 请求 | 多条文本合并为一次 API 调用 |
-| 并发控制 | AI 请求最多 3 个并发，防止限流 |
+---
 
-## 📄 License
+## 配置项（config.ts）
 
-MIT
+| 配置键 | 默认值 | 说明 |
+|--------|--------|------|
+| `mootHookEnabled` | `true` | 是否自动安装 Moot Hook |
+| `mootApiUrl` | `http://127.0.0.1:64002/wslikecmd` | Moot API 地址 |
+| `mootInterceptRequest` | `true` | 请求阶段本地翻译拦截 |
+| `mootProcessResponse` | `true` | 响应阶段 AI 译文后修正 |
+
+---
+
+## 与现有模块的协同
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   main.ts (安装入口)                │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ┌─────────────┐    ┌──────────────┐              │
+│  │  mootHook   │    │  wsHook      │              │
+│  │  (HTTP POST)│    │  (WebSocket)│              │
+│  └──────┬──────┘    └──────┬───────┘              │
+│         │                     │                        │
+│         │    ┌───────────────┐│                        │
+│         └───▶│  aiFixRules  │◀┘                        │
+│              │  (aaa/bbb/ccc)│                         │
+│              └───────┬───────┘                         │
+│                      │                                   │
+│              ┌───────▼───────┐                           │
+│              │   translator   │                           │
+│              │ (本地规则引擎) │                           │
+│              └───────────────┘                           │
+└─────────────────────────────────────────────────────┘
+```
+
+- **mootHook**：拦截 HTTP POST 到 `wslikecmd`
+- **wsHook**：拦截 WebSocket 到 `127.0.0.1:64002`
+- **两者共用** `aiFixRules`（后修正引擎）和 `translator`（本地翻译）
+- 覆盖 Moot 平台的两种通信方式，确保不漏
+
+---
+
+## 调试技巧
+
+```js
+// 1. 开启调试模式（控制台输出详细信息）
+MToolTranslatorPlugin.moot.updateConfig({ debug: true });
+
+// 2. 手动测试一条翻译
+const result = await MToolTranslatorPlugin.moot.test('あははっ情報ありがとう♪');
+console.log(result);
+
+// 3. 查看统计
+console.table(MToolTranslatorPlugin.moot.stats());
+
+// 4. 查看所有后处理规则
+console.log(MToolTranslatorPlugin.translator.getAIFixRules());
+```
+
+---
+
+## 文件结构
+
+```
+src/
+├── main.ts                     # 入口，安装所有 Hook
+├── App.vue                     # 主面板 UI
+├── config.ts                   # 全局配置
+├── utils.ts                    # 工具函数（CSV/JSON 解析等）
+├── core/
+│   ├── translator.ts          # 本地翻译引擎（精确 + 正则 + Bloom + 预翻译）
+│   ├── hook.ts                # 引擎 Hook（RPGMaker/Canvas/PixiJS 等）
+│   ├── mootHook.ts           # ★ Moot HTTP Hook（本次新增核心）
+│   ├── wsHook.ts             # Moot WebSocket Hook
+│   ├── aiFixRules.ts         # aaa/bbb/ccc 后修正引擎
+│   ├── aiTranslator.ts       # AI 翻译（OpenAI 兼容 API）
+│   ├── cache.ts              # LRU 缓存
+│   ├── logger.ts             # 日志系统
+│   ├── bloomFilter.ts       # Bloom Filter 前置过滤
+│   └── ruleCompactor.ts     # 规则压缩（相似规则→正则）
+└── components/
+    ├── MootPanel.vue         # ★ Moot Hook 管理面板（本次新增）
+    ├── AIFixRules.vue        # AI 修正规则管理
+    ├── Stats.vue              # 统计面板
+    └── Icon.vue              # SVG 图标
+```
+
+---
+
+## 注意事项
+
+1. **Moot 平台必须先启动**，Hook 才能拦截到请求
+2. **本地翻译优先**：命中本地规则时不会调用 AI，节省 API 费用
+3. **后处理规则是兜底的**：即使 AI 翻译质量差，也能通过 ccc 修正关键术语
+4. **正则规则注意转义**：JSON 中 `\d` 要写成 `\\d`
+5. **Fetch 和 XHR 都已 Hook**：无论 Moot 用哪种方式发请求都能拦截

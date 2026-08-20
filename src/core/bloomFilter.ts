@@ -1,9 +1,9 @@
 /**
  * TinyBloom — 轻量级 Bloom Filter
- * 
+ *
  * 用途：在翻译引擎中做 O(1) 前置过滤，
  *       快速判断文本"是否可能存在于"规则集中。
- * 
+ *
  * 特点：
  *   - 2 个独立哈希函数（FNV-1a + DJB2）
  *   - 3 次探针（probe）
@@ -23,16 +23,19 @@ export class TinyBloom {
   }
 
   add(str: string): void {
+    if (!str || typeof str !== 'string') return;
     const h1 = TinyBloom._hash1(str);
     const h2 = TinyBloom._hash2(str);
     for (let i = 0; i < 3; i++) {
-      const idx = (h1 + i * h2) % this.size;
-      this.bits[idx] |= (1 << ((h1 + i * h2 * 7) & 31));
+      const idx = ((h1 + i * h2) >>> 0) % this.size;
+      const bitPos = ((h1 + i * h2 * 7) >>> 0) & 31;
+      this.bits[idx] |= (1 << bitPos);
     }
     this._count++;
   }
 
   addAll(strings: Iterable<string>): void {
+    if (!strings) return;
     for (const s of strings) this.add(s);
   }
 
@@ -42,11 +45,13 @@ export class TinyBloom {
    *          true  = 可能存在（需进一步精确查询）
    */
   mightContain(str: string): boolean {
+    if (!str || typeof str !== 'string') return false;
     const h1 = TinyBloom._hash1(str);
     const h2 = TinyBloom._hash2(str);
     for (let i = 0; i < 3; i++) {
-      const idx = (h1 + i * h2) % this.size;
-      if (!(this.bits[idx] & (1 << ((h1 + i * h2 * 7) & 31)))) {
+      const idx = ((h1 + i * h2) >>> 0) % this.size;
+      const bitPos = ((h1 + i * h2 * 7) >>> 0) & 31;
+      if (!(this.bits[idx] & (1 << bitPos))) {
         return false;
       }
     }
@@ -68,9 +73,10 @@ export class TinyBloom {
 
   // ========== FNV-1a 32-bit ==========
   private static _hash1(s: string): number {
-    let h = 2166136261 >>> 0;
+    let h = (2166136261 >>> 0);
     for (let i = 0; i < s.length; i++) {
       h ^= s.charCodeAt(i);
+      // Math.imul 确保 32-bit 溢出乘法
       h = Math.imul(h, 16777619) >>> 0;
     }
     return h >>> 0;

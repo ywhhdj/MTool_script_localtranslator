@@ -1,3 +1,17 @@
 :root{
-  --accent-bg:linear-gradient(90deg, rgba(0, 118, 253, 0.444) 0%, rgba(255, 255, 255, 0.1) 100%);
+  --accent-bg: linear-gradient(90deg, rgba(0, 118, 253, 0.44) 0%, rgba(255, 255, 255, 0.1) 100%);
+  --accent-color: #e8f4fd;
+  --accent-color-dark: #1559b3;
+  --success-color: #e8f8f0;
+  --warning-color: #fdf6e3;
+  --danger-color: #fdf0f0;
+  --purple-color: #9b59b6;
+}
+
+.transparent-glass {
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
 }

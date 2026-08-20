@@ -22,3 +22,29 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+  <Icon icon="folder" /> 文件
+        </button>
+        <button
+          :class="{ active: activeTab === 'moot' }"
+          @click="activeTab = 'moot'"
+        >
+          <Icon icon="key" /> Moot
+        </button>
+        <button
+          :class="{ active: activeTab === 'settings' }"
+          @click="activeTab = 'settings'"
+        >
+          <Icon icon="settings" /> 设置
+        </button>
+        <button
+          :class="{ active: activeTab === 'stats' }"
+          @click="activeTab = 'stats'"
+        >
+          <Icon icon="chart" /> 统计
+        </button>
+        <button
+          :class="{ active: activeTab === 'logs' }"
+          @click="activeTab = 'logs'"
+        >
+          <Icon icon="schedule" /> 日志

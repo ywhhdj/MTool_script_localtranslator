@@ -6,10 +6,10 @@ export enum LogLevel {
   WARNING = 'warning',
   ERROR = 'error',
   SUCCESS = 'success',
-  DEBUG = 'debug'
+  DEBUG = 'debug',
 }
 
-export type LogFilter = LogLevel | 'all';
+export type LogFilter = LogLevel | 'total';
 
 export type LogEntry = {
   id: number;
@@ -20,20 +20,18 @@ export type LogEntry = {
 
 class Logger {
   private maxLogCount: number;
-  private logCallback: (text: string) => string;
   private _id = 0;
-  log_queue = reactive<LogEntry[]>([]);
+  public log_queue = reactive<LogEntry[]>([]);
 
-  constructor(maxLogCount?: number) {
-    this.maxLogCount = maxLogCount ?? config.user.maxLogCount?.default ?? 50;
-    this.logCallback = (text: string) =>
-      `[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] ${text}`;
+  constructor(maxLogCount: number = 50) {
+    this.maxLogCount = maxLogCount;
   }
 
   addLog(text: any, level: LogLevel = LogLevel.INFO) {
+    const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
     const entry: LogEntry = {
       id: ++this._id,
-      text: this.logCallback(String(text)),
+      text: `[${time}] ${String(text)}`,
       level,
       timestamp: Date.now(),
     };
@@ -57,14 +55,25 @@ class Logger {
   }
 
   getFiltered(filter: LogFilter): LogEntry[] {
-    if (filter === 'all') return [...this.log_queue];
+    if (filter === 'total') return [...this.log_queue];
     return this.log_queue.filter((e: LogEntry) => e.level === filter);
   }
 
-  getStats() {
-    const counts = { info: 0, warning: 0, error: 0, success: 0, debug: 0 };
+  get stats() {
+    const counts: Record<LogLevel, number> = {
+      [LogLevel.INFO]: 0,
+      [LogLevel.WARNING]: 0,
+      [LogLevel.ERROR]: 0,
+      [LogLevel.SUCCESS]: 0,
+      [LogLevel.DEBUG]: 0,
+    };
     for (const e of this.log_queue) counts[e.level]++;
     return { ...counts, total: this.log_queue.length };
+  }
+
+  setMaxCount(n: number) {
+    this.maxLogCount = Math.max(10, n);
+    this._trim();
   }
 
   private _trim() {
@@ -81,14 +90,9 @@ class Logger {
       [LogLevel.SUCCESS]: 'color: #2ecc71',
       [LogLevel.DEBUG]: 'color: #95a5a6',
     };
-    console.log(`%c[MTool] ${text}`, styles[level]);
-  }
-
-  setMaxCount(n: number) {
-    this.maxLogCount = Math.max(10, n);
-    this._trim();
+    console.log(`%c[MToolTranslatorPlugin] ${text}`, styles[level]);
   }
 }
 
-const logger = new Logger();
+const logger = new Logger(config.user.maxLogCount.default);
 export default logger;

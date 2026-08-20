@@ -1,6 +1,6 @@
 import { reactive } from 'vue';
-import { EngineType, FileFormat, Language } from './typings/enum';
-import type { AppOptions, UserConfig } from './typings';
+import { EngineType, Language } from './typings/enum';
+import { safeJSONParse } from './utils';
 
 export const Lang: Record<Language, string> = {
   [Language.en]: 'English',
@@ -8,7 +8,7 @@ export const Lang: Record<Language, string> = {
   [Language.zh_TW]: '繁體中文',
   [Language.ja]: '日本語',
   [Language.ko]: '한국어',
-}
+};
 
 const defaultEngines: Record<EngineType, boolean> = {
   [EngineType.RPGMaker]: true,
@@ -16,191 +16,253 @@ const defaultEngines: Record<EngineType, boolean> = {
   [EngineType.Cocos2d]: true,
   [EngineType.Canvas2D]: true,
   [EngineType.Bitmap]: true,
+  [EngineType.Phaser]: true,
+  [EngineType.XHR]: true,
   [EngineType.WebSocket]: false,
-  [EngineType.Fetch]: false,
-  [EngineType.XHR]: false,
+  [EngineType.Fetch]: false
+};
+
+interface ConfigField<T> {
+  description: string;
+  default: T;
+  userConfig: T;
 }
 
-export const config = reactive<AppOptions>({
-  maxCacheSize: 30000,
-  maxLogCount: 50,
-  maxReplaceCount: 1,
-  defaultSkipRules: [
-    /^[-+]?[\d０-９:-\s]+(?:\.[\d]+)?[%￥\$€£¥¢GＧ]?(?:\/[\d０-９]+)?$/,
+class ConfigFieldStore<T> implements ConfigField<T> {
+  description: string;
+  default: T;
+  userConfig: T;
+
+  constructor(description: string, defaultVal: T, userConfig: T) {
+    this.description = description;
+    this.default = defaultVal;
+    this.userConfig = userConfig;
+  }
+}
+
+class ConfigStore {
+  maxCacheSize = 10000;
+  maxLogCount = 50;
+  maxReplaceCount = 1;
+  debug = false;
+  defaultSkipRules: RegExp[] = [
+    /^[-+]?[\d０-９:\-\s]+(?:\.[\d]+)?[%￥\$€£¥¢GＧ]?(?:\/[\d０-９]+)?$/,
     /^[A-Za-z\s\.]$/,
     /^<.+?>$/,
-    /^[%\^&\*\(\)_\+-=\[\]{};'\:"\\\|,\.\<\>\/\?`~\!@#\$。，、；：？\！…—～（）｛｝【】《》￥\$€£¥¢Ｇ]+$/,
+    /^[\%\^&\*\(\)_\+-=\[\]{};'\:"\\\|,\.\<\>\/\?`~\!@#\$。，、；：？\！…—～（）｛｝【】《》￥\$€£¥¢]+$/,
     /^[\s\r\n\t\v\f\u00A0\u1680\u180e\u2000-\u200b\u202f\u205f\u3000\uFEFF]+$/,
-    /^\s*(?:O(?:FF|N))\s*$/,
-  ],
-  filterRule: /[\\]+(?:(?:u001b)?C|c|v|S[AEM]|N|P|G)+(?:\[[(?:\d(?:-nb)?|double)]+\])?/g,
-  user: {
-    fileName: {
-      description: '翻译数据文件名',
-      default: 'default.json',
-      userConfig: 'default.json',
-    },
-    autoLoad: {
-      description: '启动时自动加载缓存',
-      default: true,
-      userConfig: true,
-    },
-    transengine: {
-      description: 'MTool社区翻译引擎名',
-      default: 'Bing',
-      userConfig: '',
-    },
-    translatorName: {
-      description: 'MTool社区翻译修正名称',
-      default: '常规通用性修正',
-      userConfig: '',
-    },
-    targetLang: {
-      description: '目标语言',
-      default: Language.zh_CN,
-      userConfig: Language.zh_CN,
-    },
-    AI_BASE_URL: {
-      description: 'AI API 基础 URL',
-      default: 'https://api.deepseek.com',
-      userConfig: '',
-    },
-    AI_KEY: {
-      description: 'AI API 密钥',
-      default: '',
-      userConfig: '',
-    },
-    model: {
-      description: 'AI 模型名称',
-      default: 'deepseek-chat',
-      userConfig: '',
-    },
-    maxReplaceCount: {
-      description: '单次翻译最大替换次数',
-      default: 1,
-      userConfig: 1,
-    },
-    maxCacheSize: {
-      description: '最大缓存条目数',
-      default: 30000,
-      userConfig: 30000,
-    },
-    maxLogCount: {
-      description: '最大日志条数',
-      default: 50,
-      userConfig: 50,
-    },
-    enableAI: {
-      description: '启用 AI 翻译回退',
-      default: false,
-      userConfig: false,
-    },
-    aiTriggerThreshold: {
-      description: 'AI翻译触发阈值(连续未命中次数)',
-      default: 5,
-      userConfig: 5,
-    },
-    engines: {
-      description: '翻译引擎开关',
-      default: { ...defaultEngines },
-      userConfig: { ...defaultEngines },
-    },
-    exportFormat: {
-      description: '导出文件格式',
-      default: FileFormat.JSON,
-      userConfig: FileFormat.JSON,
-    },
-  },
-  TranslatorRules: {
-    default: {
-      '/Text Speed/': '文本播放速度',
-      '/Settings|設定/': '设置',
-      '/unseen text/': '未读文本',
-      '常時ダッシュ': '保持冲刺状态',
-      '/アイテム|ｱｲﾃﾑ/': '道具',
-      '/ロード|load/': '加载',
-      '/セーブ|save/': '保存',
-      'コマンド記憶': '指令记忆',
-      '/タッチ\s*UI/': '触摸UI',
-      home: '家',
-      'ニューゲーム': '开始游戏',
-      '/コンティニュー|つづきから/': '继续游戏',
-      'オプション': '选项',
-      'タイトル画面に戻す': '返回标题画面',
-      'ピクチャ': '图片',
-      '/[お]?兄(?:さん|を)|おにい/': '哥哥',
-      '/[お]?姉(?:さん)?/': '姐姐',
-      '電車': '电车',
-      '経験': '经验',
-      'クイックメニュー': '快捷菜单',
-      'どのファイルを加载しますか？': '您想要加载哪个存档？',
-      'ボイス': '语音',
-      'ファイル': '存档',
-    },
-    description: '日语翻译条目',
-  },
-});
+    /^\s*(?:O(?:FF|N)|[HMT]P|BG[MS]|[MS]E)\s*$/,
+  ];
 
-export function setUserConfig(user: Partial<Record<keyof UserConfig, any>>) {
-  const u = config.user;
-  if (user.fileName !== undefined) u.fileName.userConfig = user.fileName;
-  if (user.autoLoad !== undefined) u.autoLoad.userConfig = user.autoLoad;
-  if (user.transengine !== undefined) u.transengine.userConfig = user.transengine;
-  if (user.translatorName !== undefined) u.translatorName.userConfig = user.translatorName;
-  if (user.targetLang !== undefined) u.targetLang.userConfig = user.targetLang;
-  if (user.AI_BASE_URL !== undefined) u.AI_BASE_URL.userConfig = user.AI_BASE_URL;
-  if (user.AI_KEY !== undefined) u.AI_KEY.userConfig = user.AI_KEY;
-  if (user.model !== undefined) u.model.userConfig = user.model;
-  if (user.maxReplaceCount !== undefined) u.maxReplaceCount.userConfig = user.maxReplaceCount;
-  if (user.maxCacheSize !== undefined) u.maxCacheSize.userConfig = user.maxCacheSize;
-  if (user.maxLogCount !== undefined) u.maxLogCount.userConfig = user.maxLogCount;
-  if (user.enableAI !== undefined) u.enableAI.userConfig = user.enableAI;
-  if (user.aiTriggerThreshold !== undefined) u.aiTriggerThreshold.userConfig = user.aiTriggerThreshold;
-  if (user.engines !== undefined) u.engines.userConfig = { ...defaultEngines, ...user.engines };
-  if (user.exportFormat !== undefined) u.exportFormat.userConfig = user.exportFormat;
-}
+  filterRule = /[\\]+(?:(?:u001b)?C|c|v|S[AEM]|N|P|G)+(?:\[[(?:\d(?:-nb)?|double)]+\])?/g;
 
-export function getUserConfig(): Record<string, any> {
-  const u = config.user;
-  return {
-    fileName: u.fileName.userConfig || u.fileName.default,
-    autoLoad: u.autoLoad.userConfig ?? u.autoLoad.default,
-    transengine: u.transengine.userConfig || u.transengine.default,
-    translatorName: u.translatorName.userConfig || u.translatorName.default,
-    targetLang: u.targetLang.userConfig || u.targetLang.default,
-    AI_BASE_URL: u.AI_BASE_URL.userConfig || u.AI_BASE_URL.default,
-    AI_KEY: u.AI_KEY.userConfig || u.AI_KEY.default,
-    model: u.model.userConfig || u.model.default,
-    maxReplaceCount: u.maxReplaceCount.userConfig ?? u.maxReplaceCount.default,
-    maxCacheSize: u.maxCacheSize.userConfig ?? u.maxCacheSize.default,
-    maxLogCount: u.maxLogCount.userConfig ?? u.maxLogCount.default,
-    enableAI: u.enableAI.userConfig ?? u.enableAI.default,
-    aiTriggerThreshold: u.aiTriggerThreshold.userConfig ?? u.aiTriggerThreshold.default,
-    engines: { ...defaultEngines, ...u.engines.userConfig },
-    exportFormat: u.exportFormat.userConfig || u.exportFormat.default,
+  public user = reactive({
+    fileName: new ConfigFieldStore<string>(
+      '翻译数据文件名',
+      'default.json',
+      ''
+    ),
+    autoLoad: new ConfigFieldStore<boolean>(
+      '启动时自动加载缓存',
+      true,
+      true
+    ),
+    transengine: new ConfigFieldStore<string>(
+      'MTool社区翻译引擎名',
+      'Bing',
+      ''
+    ),
+    translatorName: new ConfigFieldStore<string>(
+      'MTool社区翻译修正名称',
+      '常规通用性修正',
+      ''
+    ),
+    targetLang: new ConfigFieldStore<Language>(
+      '目标语言',
+      Language.zh_CN,
+      Language.zh_CN
+    ),
+    AI_BASE_URL: new ConfigFieldStore<string>(
+      'AI API 基础 URL',
+      'https://api.deepseek.com',
+      ''
+    ),
+    AI_KEY: new ConfigFieldStore<string>(
+      'AI API 密钥',
+      '',
+      ''
+    ),
+    model: new ConfigFieldStore<string>(
+      'AI 模型名称',
+      'deepseek-v4-flash',
+      ''
+    ),
+    enableAI: new ConfigFieldStore<boolean>(
+      '启用 AI 翻译回退',
+      false,
+      false
+    ),
+    aiTriggerThreshold: new ConfigFieldStore<number>(
+      'AI翻译触发阈值',
+      5,
+      5
+    ),
+    engines: new ConfigFieldStore<Record<EngineType, boolean>>(
+      '翻译引擎开关',
+      defaultEngines,
+      defaultEngines
+    ),
+    exportFormat: new ConfigFieldStore<"json" | "csv">(
+      '导出文件格式',
+      'json',
+      'json'
+    ),
+    maxReplaceCount: new ConfigFieldStore<number>(
+      '单次翻译最大替换次数',
+      1,
+      1
+    ),
+    maxLogCount: new ConfigFieldStore<number>(
+      '最大日志条数',
+      50,
+      50
+    ),
+    hookWebSocket: new ConfigFieldStore<boolean>(
+      '拦截 MTool AI 翻译 WebSocket',
+      true,
+      true
+    ),
+    wsTargetURL: new ConfigFieldStore<string>(
+      'WS 目标地址',
+      '127.0.0.1:64002',
+      ''
+    ),
+    wsEnableRequestFix: new ConfigFieldStore<boolean>(
+      '拦截请求→本地翻译',
+      true,
+      true
+    ),
+    wsEnableResponseFix: new ConfigFieldStore<boolean>(
+      '拦截响应→AI译文后修正',
+      true,
+      true,
+    ),
+    aiFixExportFormat: new ConfigFieldStore<"json" | "csv">(
+      'AI修正规则导出格式',
+      'json',
+      'json',
+    ),
+    mootHookEnabled: new ConfigFieldStore<boolean>(
+      '启用 Moot wslikecmd HTTP 拦截',
+      true,
+      true,
+    ),
+    mootApiUrl: new ConfigFieldStore<string>(
+      'Moot API 地址',
+      'http://127.0.0.1:64002/wslikecmd',
+      'http://127.0.0.1:64002/wslikecmd'
+    ),
+    mootInterceptRequest: new ConfigFieldStore<boolean>(
+      '请求阶段本地翻译拦截',
+      true,
+      true,
+    ),
+    mootProcessResponse: new ConfigFieldStore<boolean>(
+      '响应阶段 AI 译文后修正',
+      true,
+      true,
+    ),
+    mootDebug: new ConfigFieldStore<boolean>(
+      '调试模式',
+      false,
+      false
+    ),
+    maxCacheSize: new ConfigFieldStore<number>(
+      '最大缓存大小',
+      30000,
+      30000
+    )
+  });
+
+  // 获取完整用户配置快照
+  snapshot(): Record<string, any> {
+    const result: Record<string, any> = {};
+    Object.keys(this.user).forEach(key => {
+      const field = (this.user as any)[key];
+      result[key] = field?.userConfig ?? field;
+    });
+    return result;
+  }
+
+  // 获取引擎开关（合并默认值）
+  getEngines(): Record<EngineType, boolean> {
+    const userEngines = this.user.engines.userConfig || this.user.engines.default;
+    return userEngines;
+  }
+
+  isEngineEnabled(engine: EngineType): boolean {
+    return this.getEngines()[engine] ?? true;
+  }
+
+  loadFromStorage() {
+    try {
+      const raw = localStorage.getItem('LocalTranslatorUserConfig');
+      if (raw) {
+        const parsed = safeJSONParse(raw);
+        // 逐字段赋值，保持 reactive 代理
+        for (const [key, field] of Object.entries(parsed)) {
+          const target = (this.user as any)[key];
+          if (target && typeof target === 'object' && 'userConfig' in target) {
+            target.userConfig = field;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[MToolTranslatorPlugin] 恢复用户配置失败:', e);
+    }
+  }
+
+  saveToStorage() {
+    try {
+      localStorage.setItem('LocalTranslatorUserConfig', JSON.stringify(this.snapshot()));
+    } catch (e) {
+      console.warn('[MToolTranslatorPlugin] 保存用户配置失败:', e);
+    }
+  }
+
+  // ---- 默认翻译规则 ----
+  defaultRules: Record<string, string> = {
+    '/Text Speed/': '文本播放速度',
+    '/Settings|設定/': '设置',
+    '/unseen text/': '未读文本',
+    '常時ダッシュ': '保持冲刺状态',
+    '/アイテム|ｱｲﾃﾑ/': '道具',
+    '/ロード|load/': '加载',
+    '/セーブ|save/': '保存',
+    'コマンド記憶': '指令记忆',
+    '/タッチ\s*UI/': '触摸UI',
+    'home': '家',
+    'ニューゲーム': '新游戏',
+    '/コンティニュー|つづきから/': '继续游戏',
+    'ゲーム終了': '结束游戏',
+    'オプション': '选项',
+    '/タイトル(?:画面)?に戻[する]|タイトルへ/': '返回标题画面',
+    'ピクチャ': '图片',
+    '/[お]?兄(?:さん|を)|おにい/': '哥哥',
+    '/[お]?姉(?:さん)?/': '姐姐',
+    '電車': '电车',
+    '経験': '经验',
+    'クイックメニュー': '快捷菜单',
+    'どのファイルを加载しますか？': '要加载哪个存档？',
+    'ボイス': '语音',
+    'ファイル': '存档',
+    '実績': '成就',
+    'ステータス': '状态',
+    'スキル': '技能',
   };
 }
 
-export function loadUserConfigFromStorage() {
-  try {
-    const raw = localStorage.getItem('LocalTranslatorUserConfig');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      setUserConfig(parsed);
-    }
-  } catch (e) {
-    console.warn('[MTool] 恢复用户配置失败:', e);
-  }
-}
-
-export function saveUserConfigToStorage() {
-  try {
-    localStorage.setItem('LocalTranslatorUserConfig', JSON.stringify(getUserConfig()));
-  } catch (e) {
-    console.warn('[MTool] 保存用户配置失败:', e);
-  }
-}
-
-loadUserConfigFromStorage();
+export const config = new ConfigStore();
+config.loadFromStorage();
 
 export default config;

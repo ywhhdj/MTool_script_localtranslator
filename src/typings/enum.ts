@@ -6,19 +6,13 @@ export enum Language {
   ko = 'ko',
 }
 
-export enum FileFormat {
-  JSON = 'json',
-  CSV = 'csv',
-  TSV = 'tsv',
-  XLSX = 'xlsx',
-}
-
 export enum EngineType {
   RPGMaker = 'rpgmaker',
   PixiJS = 'pixijs',
   Cocos2d = 'cocos2d',
   Canvas2D = 'canvas2d',
   Bitmap = 'bitmap',
+  Phaser = 'phaser',
   WebSocket = 'websocket',
   Fetch = 'fetch',
   XHR = 'xhr',

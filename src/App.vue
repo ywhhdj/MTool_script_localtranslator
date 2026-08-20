@@ -1,19 +1,28 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
-import FileUpload from './components/FileUpload.vue';
-import Logger from './components/Logger.vue';
-import Settings from './components/Settings.vue';
-import Stats from './components/Stats.vue';
+import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, watch } from 'vue';
 import translator from './core/translator';
-import { hookRPGMakerDialog } from './core/hook';
-import Icon from './components/Icon.vue';
+import { installEngineHooks, scanRPGMakerDialog } from './core/hookManager';
+import { uninstallAllEngineHooks } from './core/hookManager';
+import Icon, { type IconType } from './components/Icon.vue';
+import config from './config';
+import { safeJSONParse } from './utils';
 
+type Tab = 'files' | 'settings' | 'logs' | 'stats' | 'moot';
 const show = ref(false);
-const activeTab = ref<'files' | 'settings' | 'logs' | 'stats'>('files');
+const activeTab = ref<Tab>('files');
 const panelWidth = ref(360);
 const isDragging = ref(false);
-
-// ===== 优化新增状态 =====
+const tabsItems: {
+  key: Tab;
+  label: string;
+  icon: IconType
+}[] = [
+    { key: 'files', label: '文件', icon: 'folder' },
+    { key: 'settings', label: '设置', icon: 'settings' },
+    { key: 'stats', label: '统计', icon: 'chart' },
+    { key: 'moot', label: 'Moot', icon: 'key' },
+    { key: 'logs', label: '日志', icon: 'schedule' }
+  ]
 const isPreTranslating = ref(false);
 const compactResult = ref<any>(null);
 
@@ -38,69 +47,114 @@ const startDrag = () => {
 const toggle = () => { show.value = !show.value; };
 
 onMounted(() => {
-  // 安装 RPG Maker 文本扫描 + 预翻译触发
-  hookRPGMakerDialog((texts: Set<string>) => {
-    // 扫描完成后，自动执行预翻译
-    if (texts.size > 0 && translator.isPreTranslated() === false) {
-      isPreTranslating.value = true;
-      // 用 setTimeout 让 UI 有机会更新
-      setTimeout(() => {
-        try {
-          translator.preTranslate(texts);
-        } catch (e: any) {
-          console.error('[MTool] 预翻译失败:', e);
-        } finally {
-          isPreTranslating.value = false;
-        }
-      }, 0);
-    }
-  });
-
-  translator.init();
+  setTimeout(() => {
+    scanRPGMakerDialog((texts: Set<string>) => {
+      if (texts && texts.size > 0 && translator.isPreTranslated() === false) {
+        isPreTranslating.value = true;
+        setTimeout(() => {
+          try {
+            translator.preTranslate(texts);
+          } catch (e: any) {
+            console.error('[MToolTranslatorPlugin] 预翻译失败:', e);
+          } finally {
+            isPreTranslating.value = false;
+          }
+        }, 0);
+      }
+    });
+    translator.init();
+  }, 500);
 });
 
 onUnmounted(() => {
   translator.destroy();
+  uninstallAllEngineHooks();
 });
 
-const stats = computed(() => translator.getStats());
+const stats = computed(() => translator.stats);
 
-// ===== 优化操作 =====
+// ==================== 引擎开关动态监听 ====================
+watch(
+  () => ({ ...config.getEngines() }),
+  (newCfg, oldCfg) => {
+    if (!oldCfg) return;
+    // console.log('[MToolTranslatorPlugin][App] 引擎配置变化', { newCfg, oldCfg });
+    installEngineHooks(
+      (text: string) => {
+        if (!text || text.length === 0) return text;
+        if (typeof text !== 'string') return text;
+        return translator.interceptText(text);
+      },
+      newCfg,
+      {
+        xhrOptions: {
+          urlPatterns: [
+            "http://127.0.0.1:64002/wslikecmd"
+          ],
+          method: 'POST',
+          transformRequest(body, _) {
+            const data = safeJSONParse(body);
+            if (data && data.cmd && typeof data.cmd === 'string' && data.cmd === 'trs' && data.args && data.args.length > 0 && data.type && typeof data.type === 'number' && data.type === 1) {
+              if(config.debug) {
+                console.log("拦截翻译请求", data);
+              }
+              translator.addCache(data.args[0]);
+            }
+            return body;
+          },
+          transformResponse(data: API.MootResponse, _) {
+            if (data.ret && typeof data.ret === 'string' && data.type && typeof data.type === 'number' && data.type === 1) {
+              if(config.debug) {
+                console.log("拦截翻译响应", data);
+              }
+              data.ret = translator.interceptText(data.ret);
+            }
+            return data;
+          },
+        }
+      }
+      
+    );
+  },
+  { deep: true }
+);
 
-/** 手动触发规则压缩 */
+// ==================== 优化操作 ====================
+
 const runCompact = () => {
   try {
     compactResult.value = translator.compactRules(4);
   } catch (e: any) {
-    console.error('[MTool] 压缩失败:', e);
+    console.error('[MToolTranslatorPlugin] 压缩失败:', e);
   }
 };
 
-/** 手动触发预翻译（重新扫描） */
 const runPreTranslate = () => {
   if (typeof window.DataManager === 'undefined') {
-    console.warn('[MTool] DataManager 不可用');
+    console.warn('[MToolTranslatorPlugin] DataManager 不可用');
     return;
   }
-  // 强制重新扫描
   const allTexts = new Set<string>();
-  // 遍历所有已加载的数据
   for (const key of Object.keys(window.$data || {})) {
-    const data = (window as any)[key];
+    const data = (window.$data as any)[key];
     if (data) collectTexts(data, allTexts);
   }
   if (allTexts.size > 0) {
     isPreTranslating.value = true;
     setTimeout(() => {
-      translator.preTranslate(allTexts);
-      isPreTranslating.value = false;
+      try {
+        translator.preTranslate(allTexts);
+      } catch (e: any) {
+        console.error('[MToolTranslatorPlugin] 预翻译失败:', e);
+      } finally {
+        isPreTranslating.value = false;
+      }
     }, 0);
   }
 };
 
-/** 递归收集所有文本 */
 function collectTexts(obj: any, set: Set<string>) {
-  if (!obj) return;
+  if (obj === null || obj === undefined) return;
   if (typeof obj === 'string') {
     if (obj.trim() && obj.length >= 2 && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(obj)) {
       set.add(obj.trim());
@@ -113,12 +167,23 @@ function collectTexts(obj: any, set: Set<string>) {
   }
   if (typeof obj === 'object') {
     for (const key of Object.keys(obj)) {
-      if (obj.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
         collectTexts(obj[key], set);
       }
     }
   }
 }
+
+const components: Record<Tab, any> = {
+  settings: defineAsyncComponent(() => import('./components/Settings.vue')),
+  stats: defineAsyncComponent(() => import('./components/Stats.vue')),
+  moot: defineAsyncComponent(() => import('./components/MootPanel.vue')),
+  logs: defineAsyncComponent(() => import('./components/Logger.vue')),
+  files: defineAsyncComponent(() => import('./components/FileUpload.vue')),
+}
+const Component = computed(() => components[activeTab.value]);
+
+const keepAliveInclude = computed(() => Object.keys(components).join(','));
 </script>
 
 <template>
@@ -133,7 +198,6 @@ function collectTexts(obj: any, set: Set<string>) {
       class="trigger-badge"
       v-if="stats.rules > 0"
     >{{ stats.rules }}</span>
-    <!-- 预翻译状态指示 -->
     <span
       class="trigger-badge pretrans"
       v-if="stats.preTranslated"
@@ -157,7 +221,6 @@ function collectTexts(obj: any, set: Set<string>) {
       <!-- 标题栏 -->
       <div class="mtool-header">
         <span class="mtool-title">🛠 MTool 翻译引擎</span>
-        <!-- 优化状态指示 -->
         <span
           class="optimize-badge"
           v-if="stats.preTranslated"
@@ -174,37 +237,20 @@ function collectTexts(obj: any, set: Set<string>) {
       <!-- Tab 导航 -->
       <div class="mtool-tabs">
         <button
-          :class="{ active: activeTab === 'files' }"
-          @click="activeTab = 'files'"
+          v-for="tab in tabsItems"
+          :key="tab.key"
+          :class="{ active: activeTab === tab.key }"
+          @click="activeTab = tab.key"
         >
-          <Icon icon="folder" /> 文件
-        </button>
-        <button
-          :class="{ active: activeTab === 'settings' }"
-          @click="activeTab = 'settings'"
-        >
-          <Icon icon="settings" /> 设置
-        </button>
-        <button
-          :class="{ active: activeTab === 'stats' }"
-          @click="activeTab = 'stats'"
-        >
-          <Icon icon="chart" /> 统计
-        </button>
-        <button
-          :class="{ active: activeTab === 'logs' }"
-          @click="activeTab = 'logs'"
-        >
-          <Icon icon="schedule" /> 日志
+          <Icon :icon="tab.icon" /> {{ tab.label }}
         </button>
       </div>
 
       <!-- Tab 内容 -->
       <div class="mtool-content">
-        <FileUpload v-show="activeTab === 'files'" />
-        <Settings v-show="activeTab === 'settings'" />
-        <Stats v-show="activeTab === 'stats'" />
-        <Logger v-show="activeTab === 'logs'" />
+        <KeepAlive :include="keepAliveInclude">
+          <component :is="Component" />
+        </KeepAlive>
       </div>
 
       <!-- 优化工具栏（底部） -->
@@ -233,7 +279,10 @@ function collectTexts(obj: any, set: Set<string>) {
 </template>
 
 <style>
-/* ========== 全局样式 ========== */
+:root {
+  --accent-bg: linear-gradient(90deg, rgba(0, 118, 253, 0.44) 0%, rgba(255, 255, 255, 0.1) 100%);
+}
+
 .mtool-trigger {
   position: fixed;
   left: 0;
@@ -263,6 +312,11 @@ button {
   align-items: center;
   justify-content: center;
   gap: 4px;
+  border: none;
+}
+
+button:hover {
+  border-radius: 4px;
 }
 
 .mtool-trigger.active {
@@ -372,15 +426,15 @@ button {
   display: flex;
   background: #fff;
   border-bottom: 1px solid #e8e8e8;
-  padding: 0 8px;
+  padding: 0 4px;
 }
 
 .mtool-tabs button {
   flex: 1;
-  padding: 10px 4px;
+  padding: 10px 2px;
   border: none;
   background: none;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   color: #666;
   border-bottom: 2px solid transparent;

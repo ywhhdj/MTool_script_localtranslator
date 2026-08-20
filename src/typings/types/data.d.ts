@@ -10,9 +10,4 @@ declare namespace Data {
     regexRules: Array<{ pattern: RegExp; replacement: string }>;
     ruleCount: number;
   }
-
-  type lastCache = {
-    text: string;
-    result: string;
-  }
 }

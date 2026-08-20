@@ -1,16 +1,27 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue';
+import { ref, computed, nextTick, watch, onMounted } from 'vue';
 import logger, { type LogFilter, type LogEntry, LogLevel } from '../core/logger';
 import Icon from './Icon.vue';
 
 const logs = logger.log_queue;
-const filter = ref<LogFilter>('all');
+const filter = ref<LogFilter>('total');
 const searchText = ref('');
 const autoScroll = ref(true);
+const containerRef = ref<HTMLDivElement | null>(null);
+const filterLevels = computed((): {
+  label: string;
+  value: LogFilter;
+}[] => [
+  { label: '全部', value: 'total' },
+  { label: '信息', value: LogLevel.INFO },
+  { label: '成功', value: LogLevel.SUCCESS },
+  { label: '警告', value: LogLevel.WARNING },
+  { label: '错误', value: LogLevel.ERROR },
+]);
 
 const filteredLogs = computed(() => {
   let result = logs;
-  if (filter.value !== 'all') {
+  if (filter.value !== 'total') {
     result = result.filter((l: LogEntry) => l.level === filter.value);
   }
   if (searchText.value.trim()) {
@@ -20,18 +31,23 @@ const filteredLogs = computed(() => {
   return result;
 });
 
-const stats = computed(() => logger.getStats());
+const stats = computed(() => logger.stats);
 
 const clearLogs = () => logger.clearLog();
 
-const containerRef = ref<HTMLDivElement | null>(null);
-watch(filteredLogs, async () => {
+const autoScroll_ = async () => {
   if (!autoScroll.value) return;
   await nextTick();
   if (containerRef.value) {
     containerRef.value.scrollTop = containerRef.value.scrollHeight;
   }
-}, { deep: true });
+}
+
+watch(filteredLogs, autoScroll_, { deep: true });
+
+onMounted(() => {
+  autoScroll_();
+});
 </script>
 
 <template>
@@ -40,25 +56,11 @@ watch(filteredLogs, async () => {
     <div class="toolbar">
       <div class="filter-group">
         <button
-          :class="{ active: filter === 'all' }"
-          @click="filter = 'all'"
-        >全部({{ stats.total }})</button>
-        <button
-          :class="{ active: filter === LogLevel.INFO }"
-          @click="filter = LogLevel.INFO"
-        >信息</button>
-        <button
-          :class="{ active: filter === LogLevel.SUCCESS }"
-          @click="filter = LogLevel.SUCCESS"
-        >成功</button>
-        <button
-          :class="{ active: filter === LogLevel.WARNING }"
-          @click="filter = LogLevel.WARNING"
-        >警告</button>
-        <button
-          :class="{ active: filter === LogLevel.ERROR }"
-          @click="filter = LogLevel.ERROR"
-        >错误</button>
+          v-for="level in filterLevels"
+          :key="level.value"
+          :class="{ active: filter === level.value }"
+          @click="filter = level.value"
+        >{{ level.label }} {{ stats[level.value] }}</button>
       </div>
       <div class="toolbar-right">
         <div style="display: flex; align-items: center; gap: 4px;">
@@ -209,7 +211,6 @@ watch(filteredLogs, async () => {
 .log-container {
   flex: 1;
   overflow-y: auto;
-  max-height: 300px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -269,18 +270,18 @@ watch(filteredLogs, async () => {
 }
 
 .log-item.info {
-  background: #e8f4fd;
+  background: var(--accent-color);
 }
 
 .log-item.success {
-  background: #e8f8f0;
+  background: var(--success-color);
 }
 
 .log-item.warning {
-  background: #fdf6e3;
+  background: var(--warning-color);
 }
 
 .log-item.error {
-  background: #fdf0f0;
+  background: var(--danger-color);
 }
 </style>

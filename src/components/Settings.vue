@@ -4,8 +4,9 @@ import config, { Lang } from '../config';
 import aiTranslator from '../core/aiTranslator';
 import logger, { LogLevel } from '../core/logger';
 import { saveJSONFile } from '../utils';
-import { EngineType, FileFormat } from '../typings/enum';
+import { EngineType } from '../typings/enum';
 import Icon from './Icon.vue';
+import translator from '../core/translator';
 
 const subTab = ref<'basic' | 'engine' | 'ai'>('basic');
 
@@ -17,6 +18,7 @@ const engineList = computed(() => [
   { key: EngineType.Cocos2d, label: 'Cocos2d-js', desc: 'Cocos2d-js 引擎' },
   { key: EngineType.Canvas2D, label: 'Canvas 2D', desc: '原生 Canvas 渲染' },
   { key: EngineType.Bitmap, label: 'Bitmap', desc: 'Bitmap 文本渲染' },
+  { key: EngineType.Phaser, label: 'Phaser', desc: 'Phaser 游染引擎' },
   { key: EngineType.WebSocket, label: 'WebSocket', desc: 'WS 网络拦截' },
   { key: EngineType.Fetch, label: 'Fetch API', desc: 'fetch 网络拦截' },
   { key: EngineType.XHR, label: 'XHR', desc: 'XMLHttpRequest 拦截' },
@@ -41,6 +43,7 @@ const saveConfig = () => {
     engines: user.engines.userConfig,
     exportFormat: user.exportFormat.userConfig,
   }));
+  translator._installHooks();
   logger.addLog('✅ 配置已保存并应用', LogLevel.SUCCESS);
 };
 
@@ -58,15 +61,19 @@ const testAI = async () => {
   }
 };
 
-const exportConfig = () => {
+const exportConfig = async () => {
   const cfg = {
     targetLang: user.targetLang.userConfig,
     transengine: user.transengine.userConfig,
     translatorName: user.translatorName.userConfig,
     engines: user.engines.userConfig,
   };
-  saveJSONFile(cfg, 'MTool_Config');
+  await saveJSONFile(cfg, 'MTool_Config');
   logger.addLog('配置已导出', LogLevel.SUCCESS);
+};
+
+const changeEngine = (checked: boolean, eng: EngineType) => {
+  user.engines.userConfig[eng] = checked;
 };
 </script>
 
@@ -105,9 +112,9 @@ const exportConfig = () => {
       <label class="form-item">
         <span class="label">导出格式</span>
         <select v-model="user.exportFormat.userConfig">
-          <option :value="FileFormat.JSON">JSON</option>
-          <option :value="FileFormat.CSV">CSV</option>
-          <option :value="FileFormat.TSV">TSV</option>
+          <option :value="'json'">JSON</option>
+          <option :value="'csv'">CSV</option>
+          <option :value="'tsv'">TSV</option>
         </select>
       </label>
 
@@ -167,7 +174,7 @@ const exportConfig = () => {
           <input
             type="checkbox"
             :checked="user.engines.userConfig[eng.key]"
-            @change="user.engines.userConfig[eng.key] = ($event.target as HTMLInputElement).checked"
+            @change="changeEngine(($event.target as HTMLInputElement).checked, eng.key)"
           >
           <span class="slider"></span>
         </label>
@@ -192,7 +199,7 @@ const exportConfig = () => {
         <input
           type="text"
           v-model="user.AI_BASE_URL.userConfig"
-          placeholder="https://api.deepseek.com"
+          :placeholder="user.AI_BASE_URL.default"
         >
       </label>
 
@@ -210,7 +217,7 @@ const exportConfig = () => {
         <input
           type="text"
           v-model="user.model.userConfig"
-          placeholder="deepseek-chat"
+          :placeholder="user.model.default"
         >
       </label>
 
