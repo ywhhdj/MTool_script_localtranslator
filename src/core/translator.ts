@@ -21,10 +21,12 @@ import {
   parseCollData,
   isCollDataFormat,
   parseJSON,
+  isRegexPattern,
+  parseRegex,
 } from '../utils';
 import { Language } from '../typings/enum';
 import { TinyBloom } from './bloomFilter';
-import { compactRules, preTranslateTexts } from './ruleCompactor';
+import { compactRules } from './ruleCompactor';
 
 class Translator {
   private defaultData: Data.TranslationData = {
@@ -50,7 +52,29 @@ class Translator {
   private defaultSkipRules: RegExp | null = null;
   private missStreak: number = 0;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private hookTimer: ReturnType<typeof setTimeout> | null = null;
   private initialized: boolean = false;
+
+  /**
+   * 正则规则分块快筛表：把每 CHUNK_SIZE 条 pattern 合并成一个大正则。
+   * 命中失败的整块可以直接跳过，避免每条文本做上千次 replace。
+   * 元素为 null 表示该块无法合并（构造失败），必须逐条执行。
+   */
+  private regexChunks: Array<RegExp | null> = [];
+  private static readonly REGEX_CHUNK_SIZE = 50;
+
+  // 标点归一：预编译为「单字符类 + 查表」，避免每次翻译做 N 次 split/join
+  private static readonly PUNCT_RE: RegExp = Translator.buildPunctRegExp();
+  private static readonly PUNCT_MAP: Record<string, string> = config.punctuation;
+  private static readonly HAS_PUNCT_MAP: boolean =
+    !!Translator.PUNCT_MAP && Object.keys(Translator.PUNCT_MAP).length > 0;
+
+  private static buildPunctRegExp(): RegExp {
+    const chars = Object.keys(config.punctuation)
+      .map(c => c.replace(/[.*+?^${}()|[\]\\\-]/g, '\\$&'))
+      .join('');
+    return chars ? new RegExp(`[${chars}]`, 'g') : /(?!)/g;
+  }
 
   // ===== 优化 =====
   private bloom: TinyBloom = new TinyBloom(2048);
@@ -95,14 +119,22 @@ class Translator {
     this.preTranslated = false;
     this.aiLearnedCount = 0;
     if (this.flushTimer) clearTimeout(this.flushTimer);
+    if (this.hookTimer) clearTimeout(this.hookTimer);
+    this.flushTimer = null;
+    this.hookTimer = null;
+    this.regexChunks = [];
     logger.addLog('MTool 翻译引擎已销毁', LogLevel.INFO);
   }
 
   // ==================== 配置初始化 ====================
 
   private async _initConfig() {
-    const skipPatterns = config.defaultSkipRules.map((r: RegExp) => `(${r.source})`);
-    this.defaultSkipRules = new RegExp(skipPatterns.join('|'));
+    // 每条规则强制「整串匹配」：原写法直接拼接源码后，像 `Miss|Lv|[HMT]P`
+    // 这类无锚定分支会退化成「包含即命中」，导致任何带 Lv/HP 的句子都被跳过
+    const skipPatterns = config.defaultSkipRules.map((r: RegExp) => `(?:^(?:${r.source})$)`);
+    // 保留原规则的 i 标志（合并后 RegExp 不会自动继承各分支的 flags）
+    const ignoreCase = config.defaultSkipRules.some((r: RegExp) => r.flags.includes('i'));
+    this.defaultSkipRules = new RegExp(skipPatterns.join('|'), ignoreCase ? 'i' : '');
 
     // 加载默认规则
     const defaultRules = normalizeTranslationData(config.defaultRules, true);
@@ -119,7 +151,9 @@ class Translator {
 
   public _installHooks() {
     const self = this;
-    setTimeout(() => {
+    if (this.hookTimer) clearTimeout(this.hookTimer);
+    this.hookTimer = setTimeout(() => {
+      this.hookTimer = null;
       installEngineHooks(
         (text: string) => {
           if (!text || text.length === 0) return text;
@@ -136,7 +170,7 @@ class Translator {
             method: 'POST',
             transformRequest(body, _) {
               const data = safeJSONParse(body)
-              if (data && data.cmd && typeof data.cmd === 'string' && data.cmd === 'trs' && data.args && data.args.length > 0 && data.type && typeof data.type === 'number' && data.type === 1) {
+              if (data && data.cmd && typeof data.cmd === 'string' && data.cmd === 'trs' && data.args && data.args.length > 0 && typeof data.args[0] === 'string' && data.type && typeof data.type === 'number' && data.type === 1) {
                 if (config.debug) {
                   console.log("拦截翻译请求", data);
                 }
@@ -167,11 +201,10 @@ class Translator {
   }
 
   private static normalizePunctuation(text: string): string {
-    let result = text;
-    for (const [from, to] of Object.entries(config.punctuation)) {
-      result = result.split(from).join(to);
-    }
-    return result;
+    if (!text || typeof text !== 'string') return text;
+    // 无标点映射时直接返回（这里曾在热路径上每次都 Object.keys 建数组，属于纯浪费）
+    if (!Translator.HAS_PUNCT_MAP) return text;
+    return text.replace(Translator.PUNCT_RE, ch => Translator.PUNCT_MAP[ch] ?? ch);
   }
 
   // ==================== 数据构建 ====================
@@ -218,9 +251,34 @@ class Translator {
       regexRules: mergedRegex,
       ruleCount: mergedExact.size + mergedRegex.length,
     };
+    this._rebuildRegexChunks();
+  }
+
+  /**
+   * 重建分块快筛正则。仅在规则集变化时执行，不在翻译热路径上。
+   */
+  private _rebuildRegexChunks(): void {
+    const rules = this.translationData.regexRules;
+    const size = Translator.REGEX_CHUNK_SIZE;
+    const chunks: Array<RegExp | null> = [];
+    for (let i = 0; i < rules.length; i += size) {
+      const end = Math.min(i + size, rules.length);
+      let merged: RegExp | null = null;
+      try {
+        merged = new RegExp(
+          rules.slice(i, end).map(r => `(?:${r.pattern.source})`).join('|')
+        );
+      } catch {
+        merged = null; // 合并失败 → 该块逐条匹配，保证不漏规则
+      }
+      chunks.push(merged);
+    }
+    this.regexChunks = chunks;
   }
 
   private _rebuildBloom() {
+    // 按规则量预留容量：规则多时固定 2048 槽位会几乎全命中，前置过滤失效
+    this.bloom.reserve(this.translationData.exactMap.size);
     this.bloom.clear();
     for (const key of this.translationData.exactMap.keys()) {
       this.bloom.add(key);
@@ -234,7 +292,7 @@ class Translator {
     if (text.length === 0) return text;
     if (typeof text !== 'string') return text;
 
-    const rawText = String.raw`${text.trim()}`;
+    const rawText = text.trim();
     let text_ = stripControlChars(rawText);
 
     if (
@@ -245,12 +303,20 @@ class Translator {
     ) {
       return text;
     }
-    text_=Translator.normalizePunctuation(text_);
+    text_ = Translator.normalizePunctuation(text_);
 
-    // 控制符分段翻译
+    // 控制符分段翻译（带缓存，否则每次都要重新分段 + 全量正则匹配）
+    // 注意：查询键必须与 addCache 写入键一致（都用归一化后的文本），
+    // 否则含全角数字的文本会永远查不中，退化成每次重算
+    this.CONTROL_REGEX.lastIndex = 0;
     if (this.CONTROL_REGEX.test(rawText)) {
       this.CONTROL_REGEX.lastIndex = 0;
-      return this.translateWithControls(rawText);
+      const ctlKey = Translator.normalizePunctuation(rawText);
+      const cachedCtl = cache.get(ctlKey);
+      if (cachedCtl !== undefined) return cachedCtl;
+      const out = this.translateWithControls(rawText);
+      if (out !== rawText) this.addCache(rawText, out);
+      return out;
     }
 
     // 3. 缓存查询
@@ -267,7 +333,7 @@ class Translator {
       return result;
     }
     if (config.debug) {
-      console.log("未翻译文本", text_.length>50?text_.slice(0,50)+"...":text_);
+      console.log("未翻译文本", text_.length > 50 ? text_.slice(0, 50) + "..." : text_);
     }
 
     // 5. 未命中 → 忽略 + 触发 AI
@@ -282,11 +348,24 @@ class Translator {
     return text;
   }
 
-  public addCache(text: string, result: string = "") {
+  /**
+   * 写入一条已知译文。
+   * 单参调用（只有原文、译文待定）时绝不写空值进缓存：
+   * 否则命中缓存会把原文替换成空串，游戏里直接丢字。
+   */
+  public addCache(text: string, result: string = ""): void {
+    if (!text || typeof text !== 'string') return;
     text = text.trim();
-    cache.set(text, result.trim(), true);
-    this.missStreak = 0;
-    this.bloom.add(text);
+    if (!text) return;
+
+    const normalized = Translator.normalizePunctuation(text);
+    this.bloom.add(normalized);
+
+    const value = (result || '').trim();
+    if (value && value !== text) {
+      cache.set(normalized, value, true);
+      this.missStreak = 0;
+    }
   }
 
   private translateWithControls(text: string): string {
@@ -300,21 +379,22 @@ class Translator {
       // 控制符前面的纯文本段
       const before = text.slice(lastIndex, match.index);
       if (before) {
-        const translated = this.doFix(before);
-        parts.push(translated);
+        parts.push(this.doFix(before));
       }
       // 控制符本身
       parts.push(match[0]);
       lastIndex = match.index + match[0].length;
+      // 防御：零长匹配会让 while 死循环
+      if (match[0].length === 0) this.CONTROL_REGEX.lastIndex++;
     }
 
     // 剩余纯文本段
     const after = text.slice(lastIndex);
     if (after) {
-      const translated = this.doFix(after);
-      parts.push(translated);
+      parts.push(this.doFix(after));
     }
 
+    this.CONTROL_REGEX.lastIndex = 0;
     return parts.join('');
   }
 
@@ -326,8 +406,8 @@ class Translator {
     if (cache.isIgnored(text)) return text;
     if (isResourcePath(text)) return text;
 
-    // 用户精确
-    if (text.length >= 3 && !this.bloom.mightContain(text)) { } else {
+    // Bloom 前置过滤：mightContain=false 表示一定不在精确表中，可直接跳过 Map 查询
+    if (this.bloom.mightContain(text)) {
       const exact = this.translationData.exactMap.get(text);
       if (exact !== undefined) return exact;
     }
@@ -335,19 +415,26 @@ class Translator {
     let result = text;
     let replaceCount = 0;
     const maxReplace = config.user.maxReplaceCount.userConfig ?? 1;
+    const rules = this.translationData.regexRules;
+    const chunks = this.regexChunks;
+    const chunkSize = Translator.REGEX_CHUNK_SIZE;
 
-    // 用户正则
-    for (const { pattern, replacement } of this.translationData.regexRules) {
-      pattern.lastIndex = 0;
-      if (pattern.test(text)) {
+    // 用户正则：按块先做一次合并 test，整块不命中就跳过，避免每条文本做上千次 replace
+    for (let c = 0; c < chunks.length && replaceCount < maxReplace; c++) {
+      const start = c * chunkSize;
+      const end = Math.min(start + chunkSize, rules.length);
+      const merged = chunks[c];
+      if (merged && !merged.test(result)) continue;
+
+      for (let i = start; i < end; i++) {
+        const { pattern, replacement } = rules[i];
         pattern.lastIndex = 0;
-        result = text.replace(pattern, replacement);
-        if (result !== text) {
+        const next = result.replace(pattern, replacement);
+        if (next !== result) {
+          result = next;
           replaceCount++;
-          if (replaceCount >= maxReplace) {
-            break;
-          }
-        };
+          if (replaceCount >= maxReplace) break;
+        }
       }
     }
     return result;
@@ -423,7 +510,10 @@ class Translator {
       cache.set(original, translated, true);
     }
 
-    this.bloom.add(original);
+    // bloom 里存的是归一化后的 key（与 _buildInto 保持一致），否则会假阴性漏掉精确规则
+    const bloomKey = Translator.normalizePunctuation(original);
+    this.bloom.add(bloomKey);
+    this.missStreak = 0;
 
     if (!this.userData.exactMap.has(original)) {
       this.userData.exactMap.set(original, translated);
@@ -449,10 +539,20 @@ class Translator {
   }
 
   addAIFixRule(aaa: string | RegExp, bbb: string | RegExp, ccc: string): void {
+    // 形如 "/\d+日目/" 的字符串也必须识别为正则，
+    // 否则会被当成普通字符串做全等比较而永远匹配不上
+    const parsedAaa = typeof aaa === 'string' ? parseRegex(aaa) : aaa;
+    const parsedBbb = typeof bbb === 'string' ? parseRegex(bbb) : bbb;
     aiFixRules.addRule({
-      aaa, bbb, ccc,
-      _isRegex: typeof aaa !== 'string' || (typeof bbb === 'string' && bbb.startsWith('/')),
+      aaa: parsedAaa,
+      bbb: parsedBbb,
+      ccc,
+      _isRegex: isRegexPattern(parsedAaa) || isRegexPattern(parsedBbb),
     });
+  }
+
+  removeAIFixRule(index: number): boolean {
+    return aiFixRules.removeRule(index);
   }
 
   get aiFixRules() {
@@ -494,7 +594,7 @@ class Translator {
     } else if (ext === 'csv' || ext === 'tsv') {
       rawData = await readFileAsText(file);
       const delimiter = ext === 'csv' ? ',' : '\t';
-      rawData = parseDelimited(rawData, delimiter); 
+      rawData = parseDelimited(rawData, delimiter);
     } else if (ext === 'xlsx' || ext === 'xls') {
       rawData = await parseXLSX(file);
     } else {
@@ -513,7 +613,7 @@ class Translator {
     aiFixCount: number;
   } {
     // === CollData.json 格式检测 ===
-    if (ext=="json" && isCollDataFormat(rawData)) {
+    if (ext == "json" && isCollDataFormat(rawData)) {
       console.log(`[MToolTranslatorPlugin][Upload] 检测到 CollData.json 格式`);
       const rules = parseCollData(rawData);
       this._buildInto(this.userData, rules);
@@ -528,12 +628,12 @@ class Translator {
     }
 
     // === 数组格式：判断两列 vs 三列 ===
-    if ((ext=="csv"||ext=="tsv") && Array.isArray(rawData)) {
+    if ((ext == "csv" || ext == "tsv") && Array.isArray(rawData)) {
       return this._classifyAndLoad(rawData, fileName);
     }
 
     // === 对象格式 { "原文": "译文" } ===
-    if (ext=="json" && typeof rawData === 'object' && rawData !== null) {
+    if (ext == "json" && typeof rawData === 'object' && rawData !== null) {
       const rules = parseJSON(rawData);
       if (rules.length > 0) {
         this._buildInto(this.userData, rules);
@@ -748,19 +848,25 @@ class Translator {
   // ==================== 预翻译 ====================
 
   preTranslate(texts: Iterable<string>): Map<string, string> {
-    const result = preTranslateTexts(
-      texts,
-      this.translationData.exactMap,
-      this.translationData.regexRules,
-      (original: string, translated: string) => {
-        cache.set(original, translated);
-        this.bloom.add(original);
-        if (!this.userData.exactMap.has(original)) {
-          this.userData.exactMap.set(original, translated);
-          this.userData.ruleCount = this.userData.exactMap.size + this.userData.regexRules.length;
-        }
+    const result = new Map<string, string>();
+    // 走 doFix 而非逐条全量正则：复用 Bloom 前置过滤 + 分块快筛，
+    // 上万条文本时差别是数量级的
+    for (const text of texts) {
+      if (!text || typeof text !== 'string' || text.length < 2) continue;
+      if (this.isSkip(text)) continue;
+
+      const translated = this.doFix(text);
+      if (translated === text) continue;
+
+      result.set(text, translated);
+      cache.set(text, translated);
+      // bloom 里存归一化后的键，与 doFix 的查询路径保持一致
+      this.bloom.add(Translator.normalizePunctuation(text));
+      if (!this.userData.exactMap.has(text)) {
+        this.userData.exactMap.set(text, translated);
       }
-    );
+    }
+    this.userData.ruleCount = this.userData.exactMap.size + this.userData.regexRules.length;
     this.preTranslated = true;
     this._mergeToRuntime();
     logger.addLog(`预翻译完成: ${result.size} 条文本已翻译并预热到缓存`, LogLevel.SUCCESS);
@@ -785,7 +891,8 @@ class Translator {
   }
 
   private async _flushAIBatch() {
-    const texts = Array.from(cache.ignoretext).slice(-20);
+    // 只取最近未命中的文本，避免每次把整个忽略集合（可能上万条）转成数组
+    const texts = cache.getRecentIgnored(20);
     if (texts.length === 0) return;
     try {
       const results = await aiTranslator.translateBatch(texts);
@@ -817,13 +924,35 @@ class Translator {
 
   // ==================== 持久化 ====================
 
-  private _saveCacheToStorage() { cache.saveToStorage(this.cacheStorageKey); }
+  private _saveCacheToStorage(immediate: boolean = false) {
+    if (immediate) cache.saveToStorageNow(this.cacheStorageKey);
+    else cache.saveToStorage(this.cacheStorageKey);
+  }
 
   private _loadStorageCache() { cache.loadFromStorage(this.cacheStorageKey); }
 
+  /** 仅清理本插件自己写入的键，绝不触碰宿主页面/游戏的其它 localStorage 数据 */
+  private _clearOwnStorage() {
+    try {
+      const keys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        // 只清翻译数据键；主缓存键（LocalTranslatorGameCache）由调用方单独管理
+        if (k && k.startsWith('cache_')) keys.push(k);
+      }
+      keys.forEach(k => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn('[Translator] 清理旧缓存失败:', e);
+    }
+  }
+
+  /** 保存用户翻译数据（对外公开，供 UI 主动触发） */
+  public saveUserData(): void {
+    this._saveTranslationData();
+  }
+
   private _saveTranslationData() {
     if (!config.user.autoLoad.userConfig) return;
-    localStorage.clear();
     const data = {
       exactMap: Array.from(this.userData.exactMap.entries()),
       regexRules: this.userData.regexRules.map(r => ({
@@ -833,6 +962,8 @@ class Translator {
       })),
     };
     try {
+      // 注意：这里曾经调用 localStorage.clear()，会连带清空游戏存档与插件配置
+      this._clearOwnStorage();
       localStorage.setItem(`cache_${config.user.fileName.userConfig}`, JSON.stringify(data));
     } catch (e) {
       console.warn('[Translator] 保存翻译数据失败:', e);
@@ -881,7 +1012,7 @@ class Translator {
       for (const [k, v] of allExact) obj[k] = v;
       return {
         data: obj,
-        fileName: timestampFileName(`Translation_${getGameName()}`,"json")
+        fileName: timestampFileName(`Translation_${getGameName()}`, "json")
       };
     }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, watch } from 'vue';
 import translator from './core/translator';
-import { installEngineHooks, scanRPGMakerDialog } from './core/hookManager';
+import { installEngineHooks, scanRPGMakerDialog, collectTexts } from './core/hookManager';
 import { uninstallAllEngineHooks } from './core/hookManager';
 import Icon, { type IconType } from './components/Icon.vue';
 import config from './config';
@@ -72,7 +72,9 @@ onUnmounted(() => {
   uninstallAllEngineHooks();
 });
 
-const translateCount = computed(() => cache.size);
+// cache.size 不是响应式数据，需要用低频轮询驱动徽标刷新
+const translateCount = ref(0);
+let countTimer: ReturnType<typeof setInterval> | null = null;
 
 // ==================== 引擎开关动态监听 ====================
 watch(
@@ -95,8 +97,8 @@ watch(
           method: 'POST',
           transformRequest(body, _) {
             const data = safeJSONParse(body);
-            if (data && data.cmd && typeof data.cmd === 'string' && data.cmd === 'trs' && data.args && data.args.length > 0 && data.type && typeof data.type === 'number' && data.type === 1) {
-              if(config.debug) {
+            if (data && data.cmd && typeof data.cmd === 'string' && data.cmd === 'trs' && data.args && data.args.length > 0 && typeof data.args[0] === 'string' && data.type && typeof data.type === 'number' && data.type === 1) {
+              if (config.debug) {
                 console.log("拦截翻译请求", data);
               }
               translator.addCache(data.args[0]);
@@ -105,7 +107,7 @@ watch(
           },
           transformResponse(data: API.MootResponse, _) {
             if (data.ret && typeof data.ret === 'string' && data.type && typeof data.type === 'number' && data.type === 1) {
-              if(config.debug) {
+              if (config.debug) {
                 console.log("拦截翻译响应", data);
               }
               data.ret = translator.interceptText(data.ret);
@@ -114,7 +116,7 @@ watch(
           },
         }
       }
-      
+
     );
   },
   { deep: true }
@@ -154,27 +156,6 @@ const runPreTranslate = () => {
   }
 };
 
-function collectTexts(obj: any, set: Set<string>) {
-  if (obj === null || obj === undefined) return;
-  if (typeof obj === 'string') {
-    if (obj.trim() && obj.length >= 2 && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(obj)) {
-      set.add(obj.trim());
-    }
-    return;
-  }
-  if (Array.isArray(obj)) {
-    obj.forEach(item => collectTexts(item, set));
-    return;
-  }
-  if (typeof obj === 'object') {
-    for (const key of Object.keys(obj)) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        collectTexts(obj[key], set);
-      }
-    }
-  }
-}
-
 const components: Record<Tab, any> = {
   settings: defineAsyncComponent(() => import('./components/Settings.vue')),
   stats: defineAsyncComponent(() => import('./components/Stats.vue')),
@@ -184,7 +165,23 @@ const components: Record<Tab, any> = {
 }
 const Component = computed(() => components[activeTab.value]);
 
-const keepAliveInclude = computed(() => Object.keys(components).join(','));
+// KeepAlive 的 include 匹配的是组件 name（SFC 按文件名推断），
+// 之前用 tab key（小写）拼出来的字符串永远匹配不上，缓存实际未生效
+const keepAliveInclude = computed(() =>
+  Object.values(components).length ? 'Settings,Stats,MootPanel,Logger,FileUpload' : ''
+);
+
+onMounted(() => {
+  translateCount.value = cache.size;
+  countTimer = setInterval(() => {
+    translateCount.value = cache.size;
+  }, 1500);
+});
+
+onUnmounted(() => {
+  if (countTimer) clearInterval(countTimer);
+  countTimer = null;
+});
 </script>
 
 <template>
@@ -308,7 +305,8 @@ const keepAliveInclude = computed(() => Object.keys(components).join(','));
   width: 36px;
 }
 
-button {
+.mtool-panel button,
+.mtool-trigger button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -316,7 +314,8 @@ button {
   border: none;
 }
 
-button:hover {
+.mtool-panel button:hover,
+.mtool-trigger button:hover {
   border-radius: 4px;
 }
 

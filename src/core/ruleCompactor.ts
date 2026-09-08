@@ -165,11 +165,12 @@ export function preTranslateTexts(
     }
 
     let translated = text;
+    // 直接 replace 并比较，省掉一次多余的 test 匹配
     for (const { pattern, replacement } of regexRules) {
       pattern.lastIndex = 0;
-      if (pattern.test(text)) {
-        pattern.lastIndex = 0;
-        translated = text.replace(pattern, replacement);
+      const next = text.replace(pattern, replacement);
+      if (next !== text) {
+        translated = next;
         break;
       }
     }

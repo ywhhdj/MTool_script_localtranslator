@@ -29,7 +29,9 @@ export function hookFetch(options: Options.FetchHookOptions = {}): void {
   fetchOriginal = window.fetch.bind(window);
   fetchHooked = true;
 
-  console.log('[MToolTranslatorPlugin][Fetch] ✅ Fetch Hook 已安装', { jsonOnly });
+  if (config.debug) {
+    console.log('[MToolTranslatorPlugin][Fetch] ✅ Fetch Hook 已安装', { jsonOnly });
+  }
 
   window.fetch = async function (...args: any[]): Promise<Response> {
     const [input, init] = args;
@@ -38,14 +40,22 @@ export function hookFetch(options: Options.FetchHookOptions = {}): void {
 
     // 1. 资源路径直接放行
     if (isResourcePath(url)) {
-      console.log(`[MToolTranslatorPlugin][Fetch] ⏭️ 资源放行: ${method} ${url}`);
+      if (config.debug) {
+        if (config.debug) {
+          console.log(`[MToolTranslatorPlugin][Fetch] ⏭️ 资源放行: ${method} ${url}`);
+        }
+      }
       //@ts-ignore
       return fetchOriginal!(...args);
     }
 
     // 2. 用户自定义过滤
     if (shouldIntercept && !shouldIntercept(url, init)) {
-      console.log(`[MToolTranslatorPlugin][Fetch] ⏭️ 自定义过滤放行: ${method} ${url}`);
+      if (config.debug) {
+        if (config.debug) {
+          console.log(`[MToolTranslatorPlugin][Fetch] ⏭️ 自定义过滤放行: ${method} ${url}`);
+        }
+      }
       //@ts-ignore
       return fetchOriginal!(...args);
     }
@@ -56,7 +66,11 @@ export function hookFetch(options: Options.FetchHookOptions = {}): void {
       const transformed = transformRequest(args);
       if (transformed === null) {
         // null 表示完全拦截，不发送网络请求
-        console.log(`[MToolTranslatorPlugin][Fetch] 🚫 请求被拦截: ${method} ${url}`);
+        if (config.debug) {
+          if (config.debug) {
+            console.log(`[MToolTranslatorPlugin][Fetch] 🚫 请求被拦截: ${method} ${url}`);
+          }
+        }
         return new Response(JSON.stringify({ intercepted: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -65,7 +79,11 @@ export function hookFetch(options: Options.FetchHookOptions = {}): void {
       newArgs = transformed;
     }
 
-    console.log(`[MToolTranslatorPlugin][Fetch] ➡️ ${method} ${url}`);
+    if (config.debug) {
+      if (config.debug) {
+        console.log(`[MToolTranslatorPlugin][Fetch] ➡️ ${method} ${url}`);
+      }
+    }
 
     // 4. 发送请求
     //@ts-ignore
@@ -75,7 +93,11 @@ export function hookFetch(options: Options.FetchHookOptions = {}): void {
     if (jsonOnly) {
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('json') && !contentType.includes('text')) {
-        console.log(`[MToolTranslatorPlugin][Fetch] ⏭️ 非JSON响应放行: ${contentType}`);
+        if (config.debug) {
+          if (config.debug) {
+            console.log(`[MToolTranslatorPlugin][Fetch] ⏭️ 非JSON响应放行: ${contentType}`);
+          }
+        }
         return response;
       }
     }
@@ -108,7 +130,11 @@ export function unhookFetch(): void {
   window.fetch = fetchOriginal;
   fetchOriginal = null;
   fetchHooked = false;
-  console.log('[MToolTranslatorPlugin][Fetch] ↩️ Fetch Hook 已还原');
+  if (config.debug) {
+    if (config.debug) {
+      console.log('[MToolTranslatorPlugin][Fetch] ↩️ Fetch Hook 已还原');
+    }
+  }
 }
 
 // ==================== XHR Hook ====================
@@ -207,7 +233,7 @@ export function hookXHR(
     if (transformResponse) {
       this.addEventListener('readystatechange', () => {
         if (this.readyState === 4 && this.status === 200) {
-          try{
+          try {
             const contentType = this.getResponseHeader('content-type') || '';
             let originalResponse: any;
             const rt = (this as any).responseType;
@@ -264,5 +290,9 @@ export function unhookXHR(): void {
   XMLHttpRequest.prototype.open = xhrOriginalOpen;
   XMLHttpRequest.prototype.send = xhrOriginalSend;
   xhrHooked = false;
-  console.log('[MToolTranslatorPlugin][XHR] ↩️ XHR Hook 已还原');
+  if (config.debug) {
+    if (config.debug) {
+      console.log('[MToolTranslatorPlugin][XHR] ↩️ XHR Hook 已还原');
+    }
+  }
 }

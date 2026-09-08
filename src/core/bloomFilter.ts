@@ -17,15 +17,34 @@ export class TinyBloom {
   private size: number;
   private _count: number = 0;
 
+  // 复用 hash 结果，避免每次 add / mightContain 都分配临时对象
+  private static _h1: number = 0;
+  private static _h2: number = 0;
+
   constructor(size?: number) {
     this.size = size || 2048;
     this.bits = new Uint32Array(this.size);
   }
 
+  /**
+   * 按期望元素数预留容量（约 10 bit/元素，误判率 ~2%）。
+   * 仅在需要的容量大于当前容量时重建，已插入的数据会丢失，调用方需自行重建。
+   */
+  reserve(expectedItems: number): void {
+    if (!expectedItems || expectedItems <= 0) return;
+    const needed = Math.max(2048, Math.ceil((expectedItems * 10) / 32));
+    if (needed > this.size) {
+      this.size = needed;
+      this.bits = new Uint32Array(needed);
+      this._count = 0;
+    }
+  }
+
   add(str: string): void {
     if (!str || typeof str !== 'string') return;
-    const h1 = TinyBloom._hash1(str);
-    const h2 = TinyBloom._hash2(str);
+    TinyBloom._hashPair(str);
+    const h1 = TinyBloom._h1;
+    const h2 = TinyBloom._h2;
     for (let i = 0; i < 3; i++) {
       const idx = ((h1 + i * h2) >>> 0) % this.size;
       const bitPos = ((h1 + i * h2 * 7) >>> 0) & 31;
@@ -46,8 +65,9 @@ export class TinyBloom {
    */
   mightContain(str: string): boolean {
     if (!str || typeof str !== 'string') return false;
-    const h1 = TinyBloom._hash1(str);
-    const h2 = TinyBloom._hash2(str);
+    TinyBloom._hashPair(str);
+    const h1 = TinyBloom._h1;
+    const h2 = TinyBloom._h2;
     for (let i = 0; i < 3; i++) {
       const idx = ((h1 + i * h2) >>> 0) % this.size;
       const bitPos = ((h1 + i * h2 * 7) >>> 0) & 31;
@@ -71,23 +91,16 @@ export class TinyBloom {
     return this.bits.byteLength;
   }
 
-  // ========== FNV-1a 32-bit ==========
-  private static _hash1(s: string): number {
-    let h = (2166136261 >>> 0);
+  // ========== FNV-1a(32-bit) + DJB2(32-bit)，一次遍历同时算出两个哈希 ==========
+  private static _hashPair(s: string): void {
+    let h1 = 2166136261 >>> 0;
+    let h2 = 5381;
     for (let i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      // Math.imul 确保 32-bit 溢出乘法
-      h = Math.imul(h, 16777619) >>> 0;
+      const c = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 16777619) >>> 0;   // Math.imul 确保 32-bit 溢出乘法
+      h2 = ((h2 << 5) + h2 + c) >>> 0;
     }
-    return h >>> 0;
-  }
-
-  // ========== DJB2 32-bit ==========
-  private static _hash2(s: string): number {
-    let h = 5381;
-    for (let i = 0; i < s.length; i++) {
-      h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
-    }
-    return h >>> 0;
+    TinyBloom._h1 = h1 >>> 0;
+    TinyBloom._h2 = h2 >>> 0;
   }
 }

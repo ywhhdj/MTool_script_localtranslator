@@ -1,5 +1,5 @@
 import config from '../config';
-import cache from './cache';
+import { rawFetch } from '../utils';
 import logger, { LogLevel } from './logger';
 
 const pendingRequests = new Map<string, Promise<string>>();
@@ -22,6 +22,36 @@ class AITranslator {
   private model: string = '';
   private enabled: boolean = false;
 
+  /**
+   * AI 结果专用缓存。
+   * 之前直接写进全局翻译缓存（key 形如 "zh-CN:原文"），既污染了主缓存，
+   * 也会让导出的翻译文件里混进这种带语言前缀的脏 key。
+   */
+  private aiCache: Map<string, string> = new Map();
+  private static readonly AI_CACHE_MAX = 2000;
+
+  private _aiGet(key: string): string | undefined {
+    if (!this.aiCache.has(key)) return undefined;
+    const val = this.aiCache.get(key)!;
+    // 简单的 LRU 提频
+    this.aiCache.delete(key);
+    this.aiCache.set(key, val);
+    return val;
+  }
+
+  private _aiSet(key: string, value: string): void {
+    this.aiCache.set(key, value);
+    while (this.aiCache.size > AITranslator.AI_CACHE_MAX) {
+      const oldest = this.aiCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.aiCache.delete(oldest);
+    }
+  }
+
+  private _makeKey(text: string, targetLang?: string): string {
+    return `${targetLang || config.user.targetLang.userConfig}:${text}`;
+  }
+
   updateConfig() {
     this.baseURL = config.user.AI_BASE_URL.userConfig || config.user.AI_BASE_URL.default;
     this.apiKey = config.user.AI_KEY.userConfig || config.user.AI_KEY.default;
@@ -40,8 +70,9 @@ class AITranslator {
     if (!this.isAvailable) return text;
     if (!text || text.trim().length === 0) return text;
 
-    const cacheKey = `${options.targetLang || config.user.targetLang.userConfig}:${text}`;
-    if (cache.has(cacheKey)) return cache.get(cacheKey)!;
+    const cacheKey = this._makeKey(text, options.targetLang);
+    const cached = this._aiGet(cacheKey);
+    if (cached !== undefined) return cached;
     if (pendingRequests.has(cacheKey)) return pendingRequests.get(cacheKey)!;
 
     const promise = this._doTranslate(text, options);
@@ -49,7 +80,7 @@ class AITranslator {
 
     try {
       const result = await promise;
-      cache.set(cacheKey, result);
+      this._aiSet(cacheKey, result);
       return result;
     } finally {
       pendingRequests.delete(cacheKey);
@@ -67,9 +98,9 @@ class AITranslator {
     const targetLang = options.targetLang || config.user.targetLang.userConfig || 'zh-CN';
 
     for (const t of texts) {
-      const cacheKey = `${targetLang}:${t}`;
-      if (cache.has(cacheKey)) {
-        results.set(t, cache.get(cacheKey)!);
+      const cached = this._aiGet(`${targetLang}:${t}`);
+      if (cached !== undefined) {
+        results.set(t, cached);
       } else {
         uncached.push(t);
       }
@@ -83,8 +114,7 @@ class AITranslator {
       const batchResults = await this._translateBatchInternal(batch, options);
       for (const [k, v] of batchResults) {
         results.set(k, v);
-        const cacheKey = `${targetLang}:${k}`;
-        cache.set(cacheKey, v);
+        this._aiSet(`${targetLang}:${k}`, v);
       }
     }
 
@@ -113,7 +143,7 @@ class AITranslator {
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        const response = await fetch(`${this.baseURL}/chat/completions`, {
+        const response = await rawFetch(`${this.baseURL}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -163,7 +193,7 @@ class AITranslator {
           const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
           try {
-            const response = await fetch(`${this.baseURL}/chat/completions`, {
+            const response = await rawFetch(`${this.baseURL}/chat/completions`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',

@@ -20,6 +20,8 @@ import config from '../config';
 
 const installedEngines = new Set<string>();
 
+const JP_TEXT_RE = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
+
 export function getInstalledEngines(): string[] {
   return Array.from(installedEngines);
 }
@@ -224,17 +226,11 @@ export function hookRPGMakerPreTranslate(callback: (text: string) => string): vo
     'onLoad',
     function (this: any, _, ...args: any[]) {
       const object = args[0];
+      // 原地翻译：不再整体深拷贝，避免大 $data 的一次性内存/时间峰值，
+      // 同时保持对象引用不变（游戏内部缓存的引用不会失效）
       if (object && typeof object === 'object') {
-        const translated = deepTranslateInPlace(object, callback);
-        if (Array.isArray(object) && Array.isArray(translated)) {
-          object.length = 0;
-          object.push(...translated);
-        } else if (!Array.isArray(object)) {
-          Object.keys(object).forEach(k => delete object[k]);
-          Object.assign(object, translated);
-        }
+        deepTranslateInPlace(object, callback);
       }
-      args[0] = object;
       return args;
     }
   );
@@ -245,57 +241,56 @@ export function hookRPGMakerPreTranslate(callback: (text: string) => string): vo
 
 // ==================== 深度翻译（原地修改 + 返回值）====================
 
-function deepTranslateInPlace(obj: any, translateFn: (s: string) => string): any {
+const NUMERIC_OR_EMPTY = /^[\d０-９\s\-+\.\/]+$/;
+const MAX_DEEP_DEPTH = 12;
+
+function isTranslatableString(s: string): boolean {
+  return s.length >= 2 && !NUMERIC_OR_EMPTY.test(s) && !s.startsWith('\x1b') && !s.startsWith('\u001b');
+}
+
+/**
+ * 深度翻译（原地修改，返回同一对象）
+ * 带 WeakSet 循环引用保护与深度上限，避免自引用数据结构导致栈溢出
+ */
+function deepTranslateInPlace(
+  obj: any,
+  translateFn: (s: string) => string,
+  seen: WeakSet<object> = new WeakSet(),
+  depth: number = 0
+): any {
   if (obj === null || obj === undefined) return obj;
-  if (typeof obj === 'string') {
-    if (obj.length < 2) return obj;
-    if (/^[\d０-９\s\-+\.\/]+$/.test(obj)) return obj;
-    if (obj.startsWith('\x1b') || obj.startsWith('\u001b')) return obj;
-    const result = translateFn(obj);
-    return result || obj;
-  }
+  if (typeof obj !== 'object') return obj;
+  if (depth > MAX_DEEP_DEPTH) return obj;
+  if (seen.has(obj)) return obj;
+  seen.add(obj);
 
   if (Array.isArray(obj)) {
-    const newArr: any[] = [];
     for (let i = 0; i < obj.length; i++) {
       const item = obj[i];
       if (typeof item === 'string') {
-        if (item.length >= 2 && !/^[\d０-９\s\-+\.\/]+$/.test(item) && !item.startsWith('\x1b')) {
+        if (isTranslatableString(item)) {
           const translated = translateFn(item);
-          newArr.push(translated || item);
-        } else {
-          newArr.push(item);
+          if (translated) obj[i] = translated;
         }
-      } else if (typeof item === 'object') {
-        newArr.push(deepTranslateInPlace(item, translateFn));
-      } else {
-        newArr.push(item);
+      } else if (item !== null && typeof item === 'object') {
+        deepTranslateInPlace(item, translateFn, seen, depth + 1);
       }
     }
-    return newArr;
+    return obj;
   }
 
-  if (typeof obj === 'object') {
-    const newObj: Record<string, any> = {};
-    for (const key of Object.keys(obj)) {
-      if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
-      const val = obj[key];
-      if (typeof val === 'string') {
-        if (val.length >= 2 && !/^[\d０-９\s\-+\.\/]+$/.test(val) && !val.startsWith('\x1b')) {
-          const translated = translateFn(val);
-          newObj[key] = translated || val;
-        } else {
-          newObj[key] = val;
-        }
-      } else if (typeof val === 'object' && val !== null) {
-        newObj[key] = deepTranslateInPlace(val, translateFn);
-      } else {
-        newObj[key] = val;
+  for (const key of Object.keys(obj)) {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+    const val = obj[key];
+    if (typeof val === 'string') {
+      if (isTranslatableString(val)) {
+        const translated = translateFn(val);
+        if (translated) obj[key] = translated;
       }
+    } else if (val !== null && typeof val === 'object') {
+      deepTranslateInPlace(val, translateFn, seen, depth + 1);
     }
-    return newObj;
   }
-
   return obj;
 }
 
@@ -332,24 +327,32 @@ export function scanRPGMakerDialog(callback: (texts: Set<string>) => void): void
 
 // ==================== 文本收集（递归）====================
 
-function collectTexts(obj: any, set: Set<string>): void {
+export function collectTexts(
+  obj: any,
+  set: Set<string>,
+  seen: WeakSet<object> = new WeakSet(),
+  depth: number = 0
+): void {
   if (obj === null || obj === undefined) return;
   if (typeof obj === 'string') {
     if (obj.trim() && obj.length >= 2 &&
-      /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(obj)) {
+      JP_TEXT_RE.test(obj)) {
       set.add(obj.trim());
     }
     return;
   }
+  if (typeof obj !== 'object' || depth > MAX_DEEP_DEPTH) return;
+  // 循环引用保护：自引用数据会导致无限递归与栈溢出
+  if (seen.has(obj)) return;
+  seen.add(obj);
+
   if (Array.isArray(obj)) {
-    obj.forEach(item => collectTexts(item, set));
+    for (let i = 0; i < obj.length; i++) collectTexts(obj[i], set, seen, depth + 1);
     return;
   }
-  if (typeof obj === 'object') {
-    for (const key of Object.keys(obj)) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        collectTexts(obj[key], set);
-      }
+  for (const key of Object.keys(obj)) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      collectTexts(obj[key], set, seen, depth + 1);
     }
   }
 }

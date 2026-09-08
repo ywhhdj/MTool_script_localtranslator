@@ -12,12 +12,12 @@ const filterLevels = computed((): {
   label: string;
   value: LogFilter;
 }[] => [
-  { label: '全部', value: 'total' },
-  { label: '信息', value: LogLevel.INFO },
-  { label: '成功', value: LogLevel.SUCCESS },
-  { label: '警告', value: LogLevel.WARNING },
-  { label: '错误', value: LogLevel.ERROR },
-]);
+    { label: '全部', value: 'total' },
+    { label: '信息', value: LogLevel.INFO },
+    { label: '成功', value: LogLevel.SUCCESS },
+    { label: '警告', value: LogLevel.WARNING },
+    { label: '错误', value: LogLevel.ERROR },
+  ]);
 
 const filteredLogs = computed(() => {
   let result = logs;
@@ -31,7 +31,11 @@ const filteredLogs = computed(() => {
   return result;
 });
 
-const stats = computed(() => logger.stats);
+const stats = computed(() => {
+  // logger.stats 内部状态不是响应式的，这里显式依赖队列长度以驱动刷新
+  void logs.length;
+  return logger.stats;
+});
 
 const clearLogs = () => logger.clearLog();
 

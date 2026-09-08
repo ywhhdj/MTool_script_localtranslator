@@ -153,7 +153,8 @@ aaa	bbb	ccc
 
 ```json
 {
-  "rule1": {
+  "id": {
+    "type": "trs",
     "name": "通用修正",
     "transengine": "Bing",
     "data": [

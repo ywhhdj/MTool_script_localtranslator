@@ -3,6 +3,16 @@ import logger, { LogLevel } from '../logger';
 const originalMethods = new Map<string, { className: string; methodName: string; original: any }>();
 
 /**
+ * 解析全局对象路径，支持 'Bitmap' 与 'PIXI.Text' / 'Phaser.GameObjects.Text' 这类点路径
+ */
+function resolveGlobal(path: string): any {
+  if (!path) return undefined;
+  return path
+    .split('.')
+    .reduce<any>((acc, key) => (acc === null || acc === undefined ? undefined : acc[key]), window as any);
+}
+
+/**
  * 劫持某个类的原型方法
  * @param className  全局类名（如 'Bitmap', 'DataManager'）
  * @param methodName 方法名（如 'drawText', 'onLoad'）
@@ -13,7 +23,7 @@ export function hookPrototype(
   methodName: string,
   hookFn: (original: Function, ...args: any[]) => any[]
 ): void {
-  const cls = (window as any)[className];
+  const cls = resolveGlobal(className);
   if (!cls || !cls.prototype) {
     logger.addLog(`[Hook] ${className}.prototype 不存在，跳过 ${methodName}`, LogLevel.WARNING);
     return;
@@ -85,7 +95,7 @@ export function hookSetter(
   propertyName: string,
   hookFn: (originalValue: any, newValue: any) => any
 ): void {
-  const cls = (window as any)[className];
+  const cls = resolveGlobal(className);
   if (!cls || !cls.prototype) {
     logger.addLog(`[Hook] ${className} 不存在，跳过 setter ${propertyName}`, LogLevel.WARNING);
     return;

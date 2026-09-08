@@ -3,9 +3,13 @@ import { computed } from 'vue';
 import translator from '../core/translator';
 import aiTranslator from '../core/aiTranslator';
 import config from '../config';
+import { useHeartbeat } from '../utils';
 
+// translator 是普通 class，属性变化对 Vue 不可见，靠心跳驱动刷新
+const hb = useHeartbeat(1000);
 const stats = computed(() => {
   try {
+    void hb.value;
     return translator.stats;
   } catch {
     return null;
@@ -14,6 +18,7 @@ const stats = computed(() => {
 
 const aiPendingCount = computed(() => {
   try {
+    void hb.value;
     return aiTranslator.pendingCount;
   } catch {
     return 0;

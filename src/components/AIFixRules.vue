@@ -10,7 +10,11 @@ const newAaa = ref('');
 const newBbb = ref('');
 const newCcc = ref('');
 const isRegex = ref(false);
-const rules = computed(() => translator.aiFixRules);
+// translator 内部状态不是响应式的，用本地 ref + 手动刷新驱动列表更新
+const rules = ref<any[]>([...translator.aiFixRules]);
+const refreshRules = () => {
+  rules.value = [...translator.aiFixRules];
+};
 
 const triggerUpload = () => {
   fileInput.value?.click();
@@ -21,6 +25,7 @@ const handleFile = async (event: Event) => {
   const file = input.files?.[0];
   if (!file) return;
   await translator.loadAIFixRules(file);
+  refreshRules();
   input.value = '';
 };
 
@@ -58,6 +63,7 @@ const addRule = () => {
   }
 
   translator.addAIFixRule(aaa, bbb, newCcc.value);
+  refreshRules();
   newAaa.value = '';
   newBbb.value = '';
   newCcc.value = '';
@@ -65,10 +71,9 @@ const addRule = () => {
 };
 
 const removeRule = (index: number) => {
-  translator.clearAIFixRules();
-  translator.aiFixRules.forEach((r: any, i: number) => {
-    if (i !== index) translator.addAIFixRule(r.aaa, r.bbb, r.ccc);
-  });
+  // 之前是「清空 + 逐条重建」，O(n) 次重建且会重新解析正则
+  translator.removeAIFixRule(index);
+  refreshRules();
 };
 
 const exportJSON = async () => {
@@ -84,6 +89,7 @@ const exportCSV = async () => {
 const clearAll = () => {
   if (confirm('确定清空所有 AI 修正规则？')) {
     translator.clearAIFixRules();
+    refreshRules();
   }
 };
 

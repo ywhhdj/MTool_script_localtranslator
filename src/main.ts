@@ -17,7 +17,7 @@ function install() {
   }
 
   if (config.user.mootHookEnabled.userConfig) {
-    const apiUrl = config.user.mootApiUrl.userConfig || config.user.AI_BASE_URL.default;
+    const apiUrl = config.user.mootApiUrl.userConfig || config.user.mootApiUrl.default;
     mootHook.install({ apiUrl });
   }
 }
@@ -28,7 +28,7 @@ window.MToolTranslatorPlugin = {
   logger,
   config,
   aiTranslator,
-  load: (...args: any[]): Promise<boolean|void> => {
+  load: (...args: any[]): Promise<boolean | void> => {
     const file = args[0];
     if (typeof file === 'string') return translator.loadTranslationData(file);
     return translator.loadFromFile(file);
@@ -45,6 +45,20 @@ window.MToolTranslatorPlugin = {
   testAI: () => aiTranslator.translate('テスト'),
   setDebug: (debug: boolean) => config.debug = debug,
   hookAPI: installEngineHooks,
+  // README 中约定的 Moot Hook 入口，之前未挂到全局，控制台里完全访问不到
+  moot: {
+    install: (opts?: Parameters<typeof mootHook.install>[0]) => mootHook.install(opts),
+    autoInstall: (opts?: Parameters<typeof mootHook.install>[0]) => mootHook.autoInstall(opts),
+    uninstall: () => mootHook.uninstall(),
+    loadRules: (file: File) => mootHook.loadRulesFromFile(file),
+    addRule: (aaa: string | RegExp, bbb: string | RegExp | null, ccc: string) =>
+      mootHook.addRule(aaa, bbb, ccc),
+    clearRules: () => mootHook.clearRules(),
+    stats: () => mootHook.getStats(),
+    resetStats: () => mootHook.resetStats(),
+    updateConfig: (opts: Parameters<typeof mootHook.updateConfig>[0]) => mootHook.updateConfig(opts),
+    test: (text: string) => mootHook.testTranslate(text),
+  },
 };
 
 install();

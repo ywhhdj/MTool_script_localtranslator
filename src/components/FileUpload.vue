@@ -7,7 +7,8 @@ import {
   getFileType,
   timestampFileName,
   download,
-  getGameName
+  getGameName,
+  useHeartbeat
 } from '../utils';
 import Icon from './Icon.vue';
 import cache from '../core/cache';
@@ -61,8 +62,8 @@ const processFile = async (file: File) => {
     config.user.fileName.userConfig = file.name;
     // 根据用户设置自动保存
     if (config.user.autoLoad.userConfig) {
-      // 触发保存
-      translator['_saveTranslationData']?.();
+      // 走公开方法，私有方法内部曾调用 localStorage.clear()，会清空游戏存档
+      translator.saveUserData();
     }
 
   } catch (e: any) {
@@ -164,8 +165,20 @@ const addAIFixRule = () => {
 
 // ==================== 规则列表显示 ====================
 
-const translationRulesCount = () => translator.stats.userRules;
-const aiFixRulesCount = () => translator.stats.aiFixRules;
+// 内核属性对 Vue 不可见，必须显式依赖心跳，否则数字永远停在首次渲染值
+const hb = useHeartbeat(1000);
+const translationRulesCount = computed(() => {
+  void hb.value;
+  return translator.stats.userRules;
+});
+const aiFixRulesCount = computed(() => {
+  void hb.value;
+  return translator.stats.aiFixRules;
+});
+const cacheSize = computed(() => {
+  void hb.value;
+  return translator.stats.cacheSize;
+});
 
 const fileType = computed(() => {
   return ['json', 'csv', 'tsv', 'xlsx', 'xls'].map(t => `.${t}`).join(',');
@@ -252,15 +265,15 @@ const resultIconText = computed(() => {
     <div class="stats-bar">
       <div class="stat-chip">
         <span class="stat-label">翻译规则</span>
-        <span class="stat-value">{{ translationRulesCount() }}</span>
+        <span class="stat-value">{{ translationRulesCount }}</span>
       </div>
       <div class="stat-chip ai">
         <span class="stat-label">AI 翻译修正规则</span>
-        <span class="stat-value">{{ aiFixRulesCount() }}</span>
+        <span class="stat-value">{{ aiFixRulesCount }}</span>
       </div>
       <div class="stat-chip cache">
         <span class="stat-label">缓存</span>
-        <span class="stat-value">{{ translator.stats.cacheSize }}</span>
+        <span class="stat-value">{{ cacheSize }}</span>
       </div>
     </div>
 

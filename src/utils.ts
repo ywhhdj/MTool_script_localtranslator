@@ -1,3 +1,5 @@
+import { ref } from 'vue';
+
 export async function saveJSONFile(jsonData: Record<string, any>, fileName: string) {
   await download(jsonData, `${fileName}.json`, 'json');
 }
@@ -49,14 +51,19 @@ export function getNodeJSModule(moduleName: string): any {
 
 // ==================== 网络请求 ====================
 
-const oriFetch = window.fetch;
+/**
+ * 插件自身发起的网络请求必须走这一份「原始 fetch」：
+ * 一旦 Fetch 引擎开启，window.fetch 已被替换成带翻译逻辑的版本，
+ * 直接用 window.fetch 会让 AI 的响应被二次翻译处理。
+ */
+export const rawFetch: typeof fetch = window.fetch.bind(window);
 
 export async function request(
   url: string,
   method: string = 'GET',
   headers?: Record<string, string>
 ): Promise<Response> {
-  const response = await oriFetch(url, { method, headers });
+  const response = await rawFetch(url, { method, headers });
   if (response.ok) return response;
   throw new Error(`请求失败 [${response.status}]: ${url}`);
 }
@@ -112,12 +119,22 @@ export function isRegexPattern(val: any): boolean {
 
 // ==================== CSV / TSV 解析 ====================
 
+// 预编译：这些正则位于翻译热路径上，避免每次调用都新建 RegExp 对象
+const CONTROL_CHARS_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
+const RESOURCE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico|mp3|wav|ogg|mp4|webm|avi|mov|woff2?|ttf|otf|eot)$/i;
+const RESOURCE_DIR_RE = /^(img|image|images|audio|video|fonts?|res|resource|assets?|textures?)\//i;
+const DATA_URI_RE = /^data:(image|audio|video)\//;
+const FTP_URI_RE = /^ftp:\/\//;
+
 export function parseDelimited(csvContent: string, delimiter: string): string[][] {
   const rows: string[][] = [];
   const lines = csvContent.split(/\r?\n/);
+  // 转义分隔符，避免 '|' 等正则元字符破坏匹配
+  const delim = delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const splitRe = new RegExp(`${delim}(?=(?:(?:[^"]*"){2})*[^"]*$)`);
   for (const line of lines) {
     if (!line.trim()) continue;
-    const values = line.split(new RegExp(`${delimiter}(?=(?:(?:[^"]*"){2})*[^"]*$)`));
+    const values = line.split(splitRe);
     rows.push(values.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"').trim()));
   }
   return rows;
@@ -127,8 +144,22 @@ export function parseTSV(content: string): string[][] {
   return parseDelimited(content, '\t');
 }
 
-export function getGameName(): string{
-  return window.document.title;
+// ==================== UI 心跳 ====================
+// 翻译内核是普通 class，属性变化对 Vue 不可见。
+// 组件在 computed 里读 heartbeat.value，就能让统计数字定期刷新。
+export const heartbeat = ref(0);
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+export function useHeartbeat(intervalMs: number = 1000) {
+  if (!heartbeatTimer) {
+    heartbeatTimer = setInterval(() => { heartbeat.value++; }, intervalMs);
+  }
+  return heartbeat;
+}
+
+export function getGameName(): string {
+  // 页面 title 常含 \/:*?"<>| 等非法文件名字符，直接拼进导出文件名会失败
+  return (window.document.title || 'game').replace(/[\\/:*?"<>|\r\n\t]/g, '_').slice(0, 60);
 }
 
 // ==================== XLSX 解析 ====================
@@ -214,7 +245,7 @@ export function normalizeTranslationData(
   throw new Error(`无法识别的文件格式`);
 }
 
-export function parseJSON(data:any): TranslateDataNormalized {
+export function parseJSON(data: any): TranslateDataNormalized {
   const rules: Data.TranslationRule[] = [];
   for (const [k, v] of Object.entries(data)) {
     if (typeof v === 'string' && k && v) {
@@ -396,17 +427,16 @@ export function stripControlChars(str: any): string {
   if (typeof str !== 'string') {
     try { str = String(str); } catch { return ''; }
   }
-  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  return str.replace(CONTROL_CHARS_RE, '');
 }
 
 export function isResourcePath(text: any): boolean {
   if (typeof text !== 'string') return false;
   if (text.length === 0) return false;
-  const resourceExts = /\.(png|jpe?g|gif|webp|svg|bmp|ico|mp3|wav|ogg|mp4|webm|avi|mov|woff2?|ttf|otf|eot)$/i;
-  if (resourceExts.test(text)) return true;
-  if (/^(img|image|images|audio|video|fonts?|res|resource|assets?|textures?)\//i.test(text)) return true;
-  if (/^data:(image|audio|video)\//.test(text)) return true;
-  if (/^ftp:\/\//.test(text)) return true;
+  if (RESOURCE_EXT_RE.test(text)) return true;
+  if (RESOURCE_DIR_RE.test(text)) return true;
+  if (DATA_URI_RE.test(text)) return true;
+  if (FTP_URI_RE.test(text)) return true;
   return false;
 }
 
@@ -433,8 +463,8 @@ export function download(
           mimeType = "text/plain"
           break;
         case "csv":
-          mimeType = "text/csv"
-          data_ = data
+          mimeType = "text/csv;charset=utf-8"
+          data_ = "\uFEFF" + data
             .map((row: (string | number)[]) =>
               row
                 .map(cell => {

@@ -103,12 +103,12 @@ export function hookRPGMaker(callback: HookCallback): void {
   // ---- Scene_Base / Game_Interpreter ----
   // command101(params)
   if (typeof window.Game_Interpreter !== 'undefined') {
-    hookPrototype('Game_Interpreter', 'command101', (_, ...args: any[]) => {
-      // 对话命令 — 在显示前拦截
+    // 注意：必须用 function（箭头函数拿不到 hookPrototype 传入的 this 实例）
+    hookPrototype('Game_Interpreter', 'command101', function (_, ...args: any[]) {
       try {
-        // @ts-ignore
-        const interpreter = (this as any);
-        const params = interpreter._params;
+        //@ts-ignore
+        const interpreter = this as any;
+        const params = interpreter?._params;
         if (params && params[0] && typeof params[0] === 'string') {
           const text = callback(params[0]);
           if (typeof text === 'string') {
@@ -170,7 +170,10 @@ export function hookPixiJS(callback: HookCallback): void {
   const methodName = targetMethod === proto.updateText ? 'updateText'
     : targetMethod === proto._updateText ? '_updateText' : 'setText';
 
-  hookPrototype('PIXI.Text', methodName, (_, ...args: any[]) => {
+  // 支持 PIXI.Text / PIXI.BitmapText 两种挂载路径
+  const classPath = window.PIXI.Text ? 'PIXI.Text' : 'PIXI.BitmapText';
+
+  hookPrototype(classPath, methodName, (_, ...args: any[]) => {
     if (typeof args[0] === 'string' && args[0].length > 0) {
       if (config.debug) console.log(`[MToolTranslatorPlugin][Pixi] ${methodName}: "${args[0].slice(0, 30)}`);
       args[0] = callback(args[0]);

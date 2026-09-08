@@ -102,6 +102,23 @@ export function makeRule(aaaRaw: any, bbbRaw: any, cccRaw: any): AIFixRule {
   };
 }
 
+/**
+ * 统一规则字段：
+ *   - "/xxx/gi" 这类字符串统一转成真正的 RegExp
+ *   - _isRegex 依据转换后的类型重新判定
+ * 否则 aaa/bbb 是正则字符串但 _isRegex=false 时会退化成全等比较，规则永远不生效
+ */
+function normalizeRule(rule: AIFixRule): AIFixRule {
+  const aaa = parseValue(rule.aaa);
+  const bbb = parseValue(rule.bbb);
+  return {
+    aaa,
+    bbb,
+    ccc: rule.ccc,
+    _isRegex: aaa instanceof RegExp || bbb instanceof RegExp,
+  };
+}
+
 function parseValue(val: any): string | RegExp {
   if (val === undefined || val === null) return '';
   if (val instanceof RegExp) {
@@ -128,7 +145,7 @@ class AIFixRulesEngine {
   };
 
   addRule(rule: AIFixRule): void {
-    this.rules.push(rule);
+    this.rules.push(normalizeRule(rule));
     this._recalcStats();
     if (config.debug) {
       console.log(`[MToolTranslatorPlugin][AIFix] ➕ 添加规则: "${String(rule.aaa).slice(0, 20)}" → "${rule.ccc.slice(0, 30)}"`);
@@ -136,7 +153,7 @@ class AIFixRulesEngine {
   }
 
   addRules(rules: AIFixRule[]): void {
-    this.rules.push(...rules);
+    for (const r of rules) this.rules.push(normalizeRule(r));
     this._recalcStats();
     if (config.debug) {
       console.log(`[MToolTranslatorPlugin][AIFix] ➕ 批量添加 ${rules.length} 条规则`);
@@ -306,7 +323,7 @@ class AIFixRulesEngine {
     }));
     return {
       data: arr,
-      fileName: timestampFileName(`AIFixRules_${getGameName()}`, "json") ,
+      fileName: timestampFileName(`AIFixRules_${getGameName()}`, "json"),
     };
   }
 

@@ -51,7 +51,9 @@ class ConfigStore {
     /^<.+?>$/,
     /^[\%\^&\*\(\)_\+-=\[\]{};'\:"\\\|,\.\<\>\/\?`~\!@#\$。，、；：？\！…—～（）｛｝【】《》￥\$€£¥¢]+$/,
     /^[\s\r\n\t\v\f\u00A0\u1680\u180e\u2000-\u200b\u202f\u205f\u3000\uFEFF]+$/,
-    /^\s*(?:O(?:FF|N))|[HMT]P|(?:BG)?[MS]E?|Miss|Lv|CG\s*$/i,
+    // 注意：^ / $ 必须作用于整个分组，否则 "HP"、"Lv" 这类片段会在任意位置命中，
+    // 导致含这些字母的正常句子被整体跳过
+    /^\s*(?:O(?:FF|N)|[HMT]P|(?:BG)?[MS]E?|Miss|Lv|CG)\s*$/i,
   ];
   punctuation: Record<string, string> = {
     "…": '･･･',
@@ -207,10 +209,10 @@ class ConfigStore {
     return result;
   }
 
-  // 获取引擎开关（合并默认值）
+  // 获取引擎开关（合并默认值，兼容旧版本缺少新增引擎字段的配置）
   getEngines(): Record<EngineType, boolean> {
     const userEngines = this.user.engines.userConfig || this.user.engines.default;
-    return userEngines;
+    return { ...defaultEngines, ...(userEngines || {}) } as Record<EngineType, boolean>;
   }
 
   isEngineEnabled(engine: EngineType): boolean {

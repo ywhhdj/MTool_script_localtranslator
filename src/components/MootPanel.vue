@@ -27,15 +27,16 @@ const toggleEnabled = () => {
     stats.value.enabled = false;
     logger.addLog('[Moot] Hook 已禁用', LogLevel.WARNING);
   } else {
-    mootHook.install({
+    const ok = mootHook.install({
       apiUrl: config.user.mootApiUrl?.userConfig,
       interceptRequest: true,
       processResponse: true,
       debug: config.user.mootDebug?.userConfig ?? false,
     });
-    stats.value.enabled = true;
+    // install() 在已安装 / WebSocket 不可用时返回 false，不能无条件置为已启用
+    stats.value.enabled = ok === true;
     refreshStats();
-    logger.addLog('[Moot] Hook 已启用', LogLevel.SUCCESS);
+    logger.addLog(ok ? '[Moot] Hook 已启用' : '[Moot] Hook 启用失败', ok ? LogLevel.SUCCESS : LogLevel.ERROR);
   }
   // 同步配置
   if (config.user.mootHookEnabled) {
@@ -115,6 +116,9 @@ const resetStats = () => {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
+  // 插件入口可能已在启动时自动装好 Hook，先把真实状态同步进来，
+  // 否则面板会显示「已停止」而实际上正在工作
+  refreshStats();
   timer = setInterval(() => {
     if (stats.value.enabled) refreshStats();
   }, 2000);
@@ -130,12 +134,14 @@ const statusValue = computed(() => {
   return stats.value.enabled ? '✅ 运行中' : '⏸ 已停止';
 });
 
+// translator.stats 不是响应式数据，显式依赖 stats.value 才能跟着刷新
 const learnedCount = computed(() => {
-  const s = translator.stats;
-  return s.aiLearnedCount || 0;
+  void stats.value;
+  return translator.stats.aiLearnedCount || 0;
 });
 
 const totalCacheSize = computed(() => {
+  void stats.value;
   return translator.stats.cacheSize || 0;
 });
 
@@ -299,32 +305,6 @@ const statusCardClass = computed(() => ({
         style="display: none"
         @change="onRuleFileSelect"
       >
-    </div>
-
-    <!-- 规则说明 -->
-    <div class="rule-explanation">
-      <div class="expl-title">工作流程</div>
-      <div class="expl-body">
-        <p><b>① 请求阶段：</b></p>
-        <p class="code-line">POST {cmd:"trs", args:[原文]}</p>
-        <p>→ 查<b>主缓存</b>（含 AI 已学条目）</p>
-        <p>→ 命中 → 直接返回，<b>跳过 AI</b> ✅</p>
-        <p style="margin-top:6px;"><b>② 响应阶段：</b></p>
-        <p>→ AI 译文 → <b>aiFixRules.fix()</b> 修正</p>
-        <p>→ 修正结果 → <b>写入主缓存</b> ✅</p>
-        <p>→ 下次同文本 → <b>100% 缓存命中</b></p>
-      </div>
-    </div>
-
-    <!-- 缓存集成说明 -->
-    <div class="cache-flow">
-      <div class="expl-title">📦 缓存集成</div>
-      <div class="expl-body">
-        <p>AI 翻译结果 → <b>cache.set(原文, 译文)</b></p>
-        <p>下次请求 → <b>cache.get(原文)</b> → 命中 → 跳过网络</p>
-        <p>导出翻译 → 主缓存 + AI 条目 → <b>合并输出</b></p>
-        <p class="highlight">无需单独导出，一切走主缓存系统</p>
-      </div>
     </div>
 
     <!-- 测试区域 -->
@@ -662,54 +642,6 @@ const statusCardClass = computed(() => ({
   color: #999;
 }
 
-/* ===== 说明框 ===== */
-.rule-explanation,
-.cache-flow {
-  background: #f8f9fa;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-
-.cache-flow {
-  background: #f0fff4;
-  border-color: #b2f2bb;
-}
-
-.expl-title {
-  font-size: 11px;
-  font-weight: bold;
-  color: #555;
-  margin-bottom: 4px;
-}
-
-.cache-flow .expl-title {
-  color: #27ae60;
-}
-
-.expl-body {
-  font-size: 10px;
-  color: #666;
-  line-height: 1.6;
-}
-
-.expl-body p {
-  margin: 1px 0;
-}
-
-.expl-body .code-line {
-  font-family: monospace;
-  background: #eee;
-  padding: 1px 4px;
-  border-radius: 3px;
-  display: inline-block;
-}
-
-.expl-body .highlight {
-  color: #27ae60;
-  font-weight: bold;
-  margin-top: 4px;
-}
 
 /* ===== 测试 ===== */
 .test-section {

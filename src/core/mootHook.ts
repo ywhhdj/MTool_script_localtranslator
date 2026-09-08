@@ -3,7 +3,7 @@ import { WebSocketHook } from './hooks/websocket';
 import translator from './translator';
 import aiFixRules, { type AIFixRule } from './aiFixRules';
 import config from '../config';
-import { safeJSONParse, xhrRequest } from '../utils';
+import { isRegexPattern, parseRegex, safeJSONParse, xhrRequest } from '../utils';
 
 export interface MootRule {
   aaa: string | RegExp;
@@ -82,11 +82,13 @@ class MootHookManager {
     }
 
     this.apiUrl = options.apiUrl || config.user.mootApiUrl?.userConfig || this.apiUrl;
+    if (options.debug !== undefined) config.debug = options.debug;
 
     const wsOptions: Options.WebSocketHookOptions = {
       targetURL: this._extractHost(this.apiUrl),
       enableRequestFix: options.interceptRequest ?? true,
       enableResponseFix: options.processResponse ?? true,
+      // 请求阶段：命中本地翻译就直接伪造响应，跳过 AI
       translateFn: (text: string) => {
         this.stats.requestsSeen++;
         // 查主缓存 → 查翻译规则 → 返回 null 表示不拦截
@@ -101,7 +103,8 @@ class MootHookManager {
         } catch { /* ignore */ }
         return null; // 不拦截，让 AI 处理
       },
-      fixResponseFn: this.aifixResponse,
+      // 必须绑定 this，否则回调内访问 this.stats 会抛 TypeError
+      fixResponseFn: (original: string, aiResult: string) => this.aifixResponse(original, aiResult),
     };
 
     this.wsHook = new WebSocketHook(wsOptions);
@@ -132,15 +135,67 @@ class MootHookManager {
     logger.addLog('[Moot] Hook 已卸载', LogLevel.INFO);
   }
 
+  get isInstalled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * 自动安装：启动时 Moot 平台可能还没就绪，失败则按间隔重试若干次
+   */
+  autoInstall(
+    options: {
+      apiUrl?: string;
+      interceptRequest?: boolean;
+      processResponse?: boolean;
+      debug?: boolean;
+    } = {},
+    retries: number = 10,
+    interval: number = 1000
+  ): void {
+    if (this.enabled) return;
+    const tryInstall = (left: number) => {
+      if (this.enabled) return;
+      const ok = this.install(options);
+      if (ok || left <= 0) {
+        if (!ok) {
+          logger.addLog(`[Moot] 自动安装失败，已重试 ${retries} 次`, LogLevel.WARNING);
+        }
+        return;
+      }
+      setTimeout(() => tryInstall(left - 1), interval);
+    };
+    tryInstall(retries);
+  }
+
+  /**
+   * 更新配置：运行时改动需要重装 Hook 才生效
+   */
+  updateConfig(options: {
+    apiUrl?: string;
+    interceptRequest?: boolean;
+    processResponse?: boolean;
+    debug?: boolean;
+  } = {}): void {
+    if (options.debug !== undefined) config.debug = options.debug;
+    if (!this.enabled) return;
+    this.uninstall();
+    this.install(options);
+  }
+
   // ==================== 规则管理 ====================
 
   addRule(aaa: string | RegExp, bbb: string | RegExp | null, ccc: string): void {
-    const isRegex = typeof aaa !== 'string' || typeof bbb === 'string' && bbb.startsWith('/');
+    // "/\d+日目/" 这类字符串也必须转成真正的 RegExp，
+    // 否则 aaa 会退化成全等比较，规则永远匹配不上
+    const parsedAaa = typeof aaa === 'string' ? parseRegex(aaa) : aaa;
+    const parsedBbb = bbb === null || bbb === undefined
+      ? null
+      : (typeof bbb === 'string' ? parseRegex(bbb) : bbb);
     const rule: MootRule = {
-      aaa,
-      bbb: bbb || null,
+      aaa: parsedAaa,
+      bbb: parsedBbb,
       ccc,
-      _isRegex: isRegex,
+      _isRegex: isRegexPattern(parsedAaa) || isRegexPattern(parsedBbb),
     };
     this.rules.push(rule);
     if (config.debug)
@@ -251,7 +306,8 @@ class MootHookManager {
         if (fixed !== text) {
           translator.addCache(text, fixed);
         }
-        resolve(`[AI回复] ${ret}`);
+        // 返回经 aaa/bbb/ccc 修正后的结果，否则测试面板看到的和实际进游戏的不一致
+        resolve(`[AI回复] ${fixed}`);
       }).catch((err) => {
         logger.addLog(`[Moot] 测试翻译失败: ${err.message}`, LogLevel.ERROR);
         reject('[无回复] 后台可能未启动 ' + err.message);
@@ -294,9 +350,17 @@ class MootHookManager {
           const aaa = rule.aaa instanceof RegExp ? rule.aaa : new RegExp(rule.aaa);
           const bbb = rule.bbb ? (rule.bbb instanceof RegExp ? rule.bbb : new RegExp(rule.bbb)) : null;
 
+          // 带 g 标志的正则会残留 lastIndex，导致同一条规则隔次失配
+          aaa.lastIndex = 0;
           if (aaa.test(original)) {
-            if (!bbb || bbb.test(result)) {
-              result = result.replace(bbb || aaa, rule.ccc);
+            if (!bbb) {
+              result = result.replace(aaa, rule.ccc);
+            } else {
+              bbb.lastIndex = 0;
+              if (bbb.test(result)) {
+                bbb.lastIndex = 0;
+                result = result.replace(bbb, rule.ccc);
+              }
             }
           }
         } else {

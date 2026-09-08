@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import config, { Lang } from '../config';
 import aiTranslator from '../core/aiTranslator';
 import logger, { LogLevel } from '../core/logger';
+import cache from '../core/cache';
 import { saveJSONFile } from '../utils';
 import { EngineType } from '../typings/enum';
 import Icon from './Icon.vue';
@@ -26,23 +27,12 @@ const engineList = computed(() => [
 
 const saveConfig = () => {
   aiTranslator.updateConfig();
-  localStorage.setItem('LocalTranslatorUserConfig', JSON.stringify({
-    fileName: user.fileName.userConfig,
-    autoLoad: user.autoLoad.userConfig,
-    transengine: user.transengine.userConfig,
-    translatorName: user.translatorName.userConfig,
-    targetLang: user.targetLang.userConfig,
-    AI_BASE_URL: user.AI_BASE_URL.userConfig,
-    AI_KEY: user.AI_KEY.userConfig,
-    model: user.model.userConfig,
-    maxReplaceCount: user.maxReplaceCount.userConfig,
-    maxCacheSize: user.maxCacheSize.userConfig,
-    maxLogCount: user.maxLogCount.userConfig,
-    enableAI: user.enableAI.userConfig,
-    aiTriggerThreshold: user.aiTriggerThreshold.userConfig,
-    engines: user.engines.userConfig,
-    exportFormat: user.exportFormat.userConfig,
-  }));
+  // 让「最大缓存大小 / 最大日志条数」在运行期生效（之前保存了也不生效）
+  cache.setMaxSize(user.maxCacheSize.userConfig);
+  logger.setMaxCount(user.maxLogCount.userConfig);
+  // 统一走 config.saveToStorage()：手写字段清单会漏掉 Moot / WS 等配置项，
+  // 保存后这些设置会丢失
+  config.saveToStorage();
   translator._installHooks();
   logger.addLog('✅ 配置已保存并应用', LogLevel.SUCCESS);
 };
