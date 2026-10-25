@@ -52,7 +52,7 @@ pnpm typecheck      # vue-tsc 类型检查
 
 ---
 
-## 4. 对外 API
+## 对外 API
 
 ```js
 MToolTranslatorPlugin.load(fileOrName)        // 加载翻译文件
