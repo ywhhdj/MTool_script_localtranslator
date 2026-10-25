@@ -1,72 +1,74 @@
-import config from "./config";
-import translator from "./core/translator";
-import cache from "./core/cache";
-import logger, { LogLevel } from "./core/logger";
-import aiTranslator from "./core/aiTranslator";
-import mootHook from "./core/mootHook";
-import { download } from "./utils";
-import { installEngineHooks } from "./core/hookManager";
-import cheat from "./core/cheat";
+/**
+ * main.ts — 插件入口
+ *
+ * 职责：装配容器、安装内核、暴露稳定的全局 API（window.MToolTranslatorPlugin）。
+ * 不包含任何业务逻辑。
+ */
 
-function install() {
-  if (config.user.autoLoad.userConfig) {
-    translator.init();
-    const defaultFile = config.user.fileName.userConfig;
-    if (defaultFile && defaultFile !== config.user.fileName.default) {
-      translator.loadTranslationData(defaultFile);
-    }
-  }
-  if (
-    config.user.cheatEnabled?.userConfig &&
-    config.user.cheatAutoApply?.userConfig
-  ) {
-    setTimeout(() => {
-      try {
-        cheat.apply();
-      } catch (e) {
-        console.warn("[MToolTranslatorPlugin] 修改器自动应用失败:", e);
-      }
-    }, 800);
-  }
+import { container } from "./core/container";
+import {
+  cache,
+  config,
+  logger,
+  translator,
+  aiTranslator,
+  mootHook,
+} from "./core";
+import {
+  downloadDelimited,
+  downloadJson,
+  getGameName,
+  timestampFileName,
+} from "./core/io/files";
+import { LogLevel } from "./typings/enum";
 
-  if (config.user.mootHookEnabled.userConfig) {
-    const apiUrl =
-      config.user.mootApiUrl.userConfig || config.user.mootApiUrl.default;
-    mootHook.install({ apiUrl });
-  }
-}
+container.install();
 
-window.MToolTranslatorPlugin = {
+const plugin = {
+  /** 版本 */
+  version: "0.3.0",
   translator,
   cache,
   logger,
   config,
   aiTranslator,
-  load: (...args: any[]): Promise<boolean | void> => {
+  mootHook,
+  cheat: container.cheat,
+
+  /** 加载翻译文件（File 或文件名） */
+  load: (...args: any[]): Promise<any> => {
     const file = args[0];
     if (typeof file === "string") return translator.loadTranslationData(file);
     return translator.loadFromFile(file);
   },
-  export: async (...args: any[]) => {
-    const format = args[0];
-    const fmt = (
-      format === "csv" ? "csv" : format === "tsv" ? "tsv" : "json"
-    ) as any;
-    const { data, fileName } = translator.exportTranslationData(fmt);
-    await download(data, fileName, fmt);
+
+  /** 导出翻译数据 */
+  export: async (format: "json" | "csv" | "tsv" = "json"): Promise<void> => {
+    const { data, fileName } = translator.exportTranslationData(format);
+    if (format === "json") downloadJson(data, fileName);
+    else
+      downloadDelimited(
+        data as string[][],
+        fileName,
+        format === "csv" ? "," : "\t"
+      );
   },
+
   reset: () => translator.reset(),
   stats: () => translator.stats,
   log: (text: string, level: LogLevel = LogLevel.INFO) =>
-    logger.addLog(text, level),
+    logger.addLog(text, level as any),
   testAI: () => aiTranslator.translate("テスト"),
-  setDebug: (debug: boolean) => (config.debug = debug),
-  hookAPI: installEngineHooks,
+  setDebug: (debug: boolean) => logger.setConsoleEnabled(debug),
+  hookAPI: () => translator.installHooks(),
+  save: () => translator.saveUserData(true),
+  dispose: () => container.dispose(),
+
   moot: {
     install: (opts?: Parameters<typeof mootHook.install>[0]) =>
-      mootHook.install(opts),
+      mootHook.install(opts ?? {}),
     autoInstall: (opts?: Parameters<typeof mootHook.install>[0]) =>
-      mootHook.autoInstall(opts),
+      mootHook.autoInstall(opts ?? {}),
     uninstall: () => mootHook.uninstall(),
     loadRules: (file: File) => mootHook.loadRulesFromFile(file),
     addRule: (aaa: string | RegExp, bbb: string | RegExp | null, ccc: string) =>
@@ -75,21 +77,16 @@ window.MToolTranslatorPlugin = {
     stats: () => mootHook.getStats(),
     resetStats: () => mootHook.resetStats(),
     updateConfig: (opts: Parameters<typeof mootHook.updateConfig>[0]) =>
-      mootHook.updateConfig(opts),
+      mootHook.updateConfig(opts ?? {}),
     test: (text: string) => mootHook.testTranslate(text),
   },
 };
 
-install();
+if (typeof window !== "undefined") {
+  (window as any).MToolTranslatorPlugin = plugin;
+}
 
-logger.addLog("MToolTranslatorPlugin v0.2.0 已启动", LogLevel.SUCCESS);
-console.log(
-  "%c[MToolTranslatorPlugin] v0.2.0 Ready! ",
-  "color: #197dea; font-weight: bold;"
-);
-console.log(
-  "%c[MootHook] window.MToolTranslatorPlugin 访问 MootHookAPI",
-  "color: #9b59b6; font-weight: bold;"
-);
+logger.addLog("MToolTranslatorPlugin v0.3.0 已启动", LogLevel.SUCCESS as any);
 
-export default window.MToolTranslatorPlugin;
+export { getGameName, timestampFileName };
+export default plugin;

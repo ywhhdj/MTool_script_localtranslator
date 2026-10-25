@@ -3,7 +3,7 @@ declare namespace API {
     choices: Array<{
       message: { content: string };
     }>;
-  }
+  };
 
   type MootRequest = {
     id: number;
@@ -11,12 +11,12 @@ declare namespace API {
     target: number;
     cmd: "trs";
     args: string[];
-  }
+  };
 
   type MootResponse = {
     id: number;
     ret: string;
     error: boolean;
     type: number;
-  }
+  };
 }

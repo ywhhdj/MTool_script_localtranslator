@@ -7,40 +7,54 @@ const cssInjectedByJs = (): PluginOption => ({
   enforce: "post" as const,
   generateBundle(_: any, bundle: any) {
     const cssFiles = Object.keys(bundle).filter((key) => key.endsWith(".css"));
-    const jsFiles = Object.keys(bundle).filter((key) => key.endsWith(".js"));
+    const jsFiles = Object.keys(bundle).filter(
+      (key) => key.endsWith(".js") && bundle[key].type === "chunk"
+    );
+    if (cssFiles.length === 0 || jsFiles.length === 0) return;
 
-    if (cssFiles.length > 0 && jsFiles.length > 0) {
-      // 1. 提取合并所有组件的 CSS 样式
-      const cssContent = cssFiles
-        .map((key) => (bundle[key] as any).source)
-        .join("");
+    const cssContent = cssFiles.map((key) => bundle[key].source ?? "").join("");
+    const entryKey =
+      jsFiles.find((key) => bundle[key].isEntry) ?? jsFiles[jsFiles.length - 1];
+    const jsFile = bundle[entryKey];
+    const safeCss = JSON.stringify(cssContent);
+    jsFile.code =
+      `(function(){try{var s=document.createElement('style');s.textContent=${safeCss};` +
+      `s.setAttribute('data-mtool','1');document.head.appendChild(s);}catch(e){}})();\n` +
+      jsFile.code;
 
-      // 2. 找到打包后的主 JS 文件
-      const jsFile = bundle[jsFiles[0]] as any;
-      const safeCss = JSON.stringify(cssContent);
-      const injectionCode = `(function(){try{var s=document.createElement('style');s.textContent=${safeCss};s.setAttribute('data-mtool','1');document.head.appendChild(s);}catch(e){}})();\n`;
-      jsFile.code = injectionCode + jsFile.code;
-
-      cssFiles.forEach((key) => delete bundle[key]);
-    }
+    for (const key of cssFiles) delete bundle[key];
   },
 });
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [vue(), cssInjectedByJs()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    target: "es2020",
+    cssCodeSplit: false,
+    assetsInlineLimit: 4096,
+    minify: "esbuild",
+    sourcemap: false,
+    chunkSizeWarningLimit: 1200,
+    reportCompressedSize: false,
     lib: {
       entry: "index.ts",
       name: "MToolTranslatorPlugin",
       formats: ["iife"],
+      fileName: () => "mtool-translator-plugin.js",
     },
     rollupOptions: {
-      external: [],
+      output: {
+        inlineDynamicImports: true,
+      },
+      treeshake: {
+        moduleSideEffects: false,
+      },
     },
-    cssCodeSplit: false,
-    assetsInlineLimit: 4096,
+  },
+  esbuild: {
+    drop: ["debugger"],
+    legalComments: "none",
   },
 });

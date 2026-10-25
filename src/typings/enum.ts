@@ -23,3 +23,11 @@ export enum Role {
   Assistant = "assistant",
   System = "system",
 }
+
+export enum LogLevel {
+  DEBUG = "debug",
+  INFO = "info",
+  WARNING = "warning",
+  ERROR = "error",
+  SUCCESS = "success",
+}
