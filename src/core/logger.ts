@@ -1,22 +1,22 @@
-import { reactive } from 'vue';
-import config from '../config';
+import { reactive } from "vue";
+import config from "../config";
 
 export enum LogLevel {
-  INFO = 'info',
-  WARNING = 'warning',
-  ERROR = 'error',
-  SUCCESS = 'success',
-  DEBUG = 'debug',
+  INFO = "info",
+  WARNING = "warning",
+  ERROR = "error",
+  SUCCESS = "success",
+  DEBUG = "debug",
 }
 
-export type LogFilter = LogLevel | 'total';
+export type LogFilter = LogLevel | "total";
 
 export type LogEntry = {
   id: number;
   text: string;
   level: LogLevel;
   timestamp: number;
-}
+};
 
 class Logger {
   private maxLogCount: number;
@@ -28,7 +28,7 @@ class Logger {
   }
 
   addLog(text: any, level: LogLevel = LogLevel.INFO) {
-    const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
     const entry: LogEntry = {
       id: ++this._id,
       text: `[${time}] ${String(text)}`,
@@ -51,11 +51,11 @@ class Logger {
   exportLogs(): string {
     return this.log_queue
       .map((e: LogEntry) => `[${e.level}] ${e.text}`)
-      .join('\n');
+      .join("\n");
   }
 
   getFiltered(filter: LogFilter): LogEntry[] {
-    if (filter === 'total') return [...this.log_queue];
+    if (filter === "total") return [...this.log_queue];
     return this.log_queue.filter((e: LogEntry) => e.level === filter);
   }
 
@@ -84,11 +84,11 @@ class Logger {
 
   private _consoleOutput(text: any, level: LogLevel) {
     const styles: Record<LogLevel, string> = {
-      [LogLevel.INFO]: 'color: #197dea',
-      [LogLevel.WARNING]: 'color: #f39c12',
-      [LogLevel.ERROR]: 'color: #e74c3c',
-      [LogLevel.SUCCESS]: 'color: #2ecc71',
-      [LogLevel.DEBUG]: 'color: #95a5a6',
+      [LogLevel.INFO]: "color: #197dea",
+      [LogLevel.WARNING]: "color: #f39c12",
+      [LogLevel.ERROR]: "color: #e74c3c",
+      [LogLevel.SUCCESS]: "color: #2ecc71",
+      [LogLevel.DEBUG]: "color: #95a5a6",
     };
     console.log(`%c[MToolTranslatorPlugin] ${text}`, styles[level]);
   }

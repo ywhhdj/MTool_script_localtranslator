@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import translator from '../core/translator';
 import logger, { LogLevel } from '../core/logger';
-import Icon from './Icon.vue';
+import Icon from './base/Icon.vue';
 import { download } from '../utils';
 
 const fileInput = ref<HTMLInputElement | null>(null);

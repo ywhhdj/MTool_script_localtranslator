@@ -1,9 +1,9 @@
-import config from '../config';
-import cache from './cache';
-import logger, { LogLevel } from './logger';
-import { hookRPGMakerPreTranslate, installEngineHooks } from './hookManager';
-import aiTranslator from './aiTranslator';
-import aiFixRules, { type AIFixRule } from './aiFixRules';
+import config from "../config";
+import cache from "./cache";
+import logger, { LogLevel } from "./logger";
+import { hookRPGMakerPreTranslate, installEngineHooks } from "./hookManager";
+import aiTranslator from "./aiTranslator";
+import aiFixRules, { type AIFixRule } from "./aiFixRules";
 import {
   getCsvFileData,
   getFileType,
@@ -23,10 +23,10 @@ import {
   parseJSON,
   isRegexPattern,
   parseRegex,
-} from '../utils';
-import { Language } from '../typings/enum';
-import { TinyBloom } from './bloomFilter';
-import { compactRules } from './ruleCompactor';
+} from "../utils";
+import { Language } from "../typings/enum";
+import { TinyBloom } from "./bloomFilter";
+import { compactRules } from "./ruleCompactor";
 
 class Translator {
   private defaultData: Data.TranslationData = {
@@ -46,9 +46,12 @@ class Translator {
   };
 
   isCustomConfig: boolean = true;
-  private ONLY_PUNCTUATION: RegExp = /^[\s%^&*()_+･\-=\[\]{};':"\\|,.<>\/?`~♪!@#$♡。，、；：？！…—～（）｛｝【】《》￥$€£¥¢·・…‥〃〆々〰]+$/;
-  private CONTROL_REGEX: RegExp = /\\[A-Za-z](?:\[[^\]]*\])?|\x1b\[[\d;]*[A-Za-z]/g;
-  private ALL_CONTROL_CHARS: RegExp = /^\\[A-Za-z](?:\[[^\]]*\])?$|^\x1b\[[\d;]*[A-Za-z]$/;
+  private ONLY_PUNCTUATION: RegExp =
+    /^[\s%^&*()_+･\-=\[\]{};':"\\|,.<>\/?`~♪!@#$♡。，、；：？！…—～（）｛｝【】《》￥$€£¥¢·・…‥〃〆々〰]+$/;
+  private CONTROL_REGEX: RegExp =
+    /\\[A-Za-z](?:\[[^\]]*\])?|\x1b\[[\d;]*[A-Za-z]/g;
+  private ALL_CONTROL_CHARS: RegExp =
+    /^\\[A-Za-z](?:\[[^\]]*\])?$|^\x1b\[[\d;]*[A-Za-z]$/;
   private defaultSkipRules: RegExp | null = null;
   private missStreak: number = 0;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -65,15 +68,16 @@ class Translator {
 
   // 标点归一：预编译为「单字符类 + 查表」，避免每次翻译做 N 次 split/join
   private static readonly PUNCT_RE: RegExp = Translator.buildPunctRegExp();
-  private static readonly PUNCT_MAP: Record<string, string> = config.punctuation;
+  private static readonly PUNCT_MAP: Record<string, string> =
+    config.punctuation;
   private static readonly HAS_PUNCT_MAP: boolean =
     !!Translator.PUNCT_MAP && Object.keys(Translator.PUNCT_MAP).length > 0;
 
   private static buildPunctRegExp(): RegExp {
     const chars = Object.keys(config.punctuation)
-      .map(c => c.replace(/[.*+?^${}()|[\]\\\-]/g, '\\$&'))
-      .join('');
-    return chars ? new RegExp(`[${chars}]`, 'g') : /(?!)/g;
+      .map((c) => c.replace(/[.*+?^${}()|[\]\\\-]/g, "\\$&"))
+      .join("");
+    return chars ? new RegExp(`[${chars}]`, "g") : /(?!)/g;
   }
 
   // ===== 优化 =====
@@ -92,7 +96,10 @@ class Translator {
     this._installHooks();
     this._loadStorageCache();
     aiTranslator.updateConfig();
-    logger.addLog('MTool 翻译引擎初始化完成（Bloom+预翻译+AI缓存学习已启用）', LogLevel.SUCCESS);
+    logger.addLog(
+      "MTool 翻译引擎初始化完成（Bloom+预翻译+AI缓存学习已启用）",
+      LogLevel.SUCCESS
+    );
   }
 
   public destroy() {
@@ -103,17 +110,17 @@ class Translator {
     this.translationData = {
       exactMap: new Map(),
       regexRules: [],
-      ruleCount: 0
+      ruleCount: 0,
     };
     this.defaultData = {
       exactMap: new Map(),
       regexRules: [],
-      ruleCount: 0
+      ruleCount: 0,
     };
     this.userData = {
       exactMap: new Map(),
       regexRules: [],
-      ruleCount: 0
+      ruleCount: 0,
     };
     this.initialized = false;
     this.preTranslated = false;
@@ -123,7 +130,7 @@ class Translator {
     this.flushTimer = null;
     this.hookTimer = null;
     this.regexChunks = [];
-    logger.addLog('MTool 翻译引擎已销毁', LogLevel.INFO);
+    logger.addLog("MTool 翻译引擎已销毁", LogLevel.INFO);
   }
 
   // ==================== 配置初始化 ====================
@@ -131,16 +138,26 @@ class Translator {
   private async _initConfig() {
     // 每条规则强制「整串匹配」：原写法直接拼接源码后，像 `Miss|Lv|[HMT]P`
     // 这类无锚定分支会退化成「包含即命中」，导致任何带 Lv/HP 的句子都被跳过
-    const skipPatterns = config.defaultSkipRules.map((r: RegExp) => `(?:^(?:${r.source})$)`);
+    const skipPatterns = config.defaultSkipRules.map(
+      (r: RegExp) => `(?:^(?:${r.source})$)`
+    );
     // 保留原规则的 i 标志（合并后 RegExp 不会自动继承各分支的 flags）
-    const ignoreCase = config.defaultSkipRules.some((r: RegExp) => r.flags.includes('i'));
-    this.defaultSkipRules = new RegExp(skipPatterns.join('|'), ignoreCase ? 'i' : '');
+    const ignoreCase = config.defaultSkipRules.some((r: RegExp) =>
+      r.flags.includes("i")
+    );
+    this.defaultSkipRules = new RegExp(
+      skipPatterns.join("|"),
+      ignoreCase ? "i" : ""
+    );
 
     // 加载默认规则
     const defaultRules = normalizeTranslationData(config.defaultRules, true);
     if (defaultRules && defaultRules.length > 0) {
       this._buildInto(this.defaultData, defaultRules);
-      logger.addLog(`默认规则加载完成（${this.defaultData.ruleCount} 条）`, LogLevel.INFO);
+      logger.addLog(
+        `默认规则加载完成（${this.defaultData.ruleCount} 条）`,
+        LogLevel.INFO
+      );
     }
 
     this._mergeToRuntime();
@@ -157,20 +174,29 @@ class Translator {
       installEngineHooks(
         (text: string) => {
           if (!text || text.length === 0) return text;
-          if (typeof text !== 'string') return text;
+          if (typeof text !== "string") return text;
           if (text.length <= 1) return text;
           return self.interceptText(text);
         },
         config.getEngines(),
         {
           xhrOptions: {
-            urlPatterns: [
-              "http://127.0.0.1:64002/wslikecmd"
-            ],
-            method: 'POST',
+            urlPatterns: ["http://127.0.0.1:64002/wslikecmd"],
+            method: "POST",
             transformRequest(body, _) {
-              const data = safeJSONParse(body)
-              if (data && data.cmd && typeof data.cmd === 'string' && data.cmd === 'trs' && data.args && data.args.length > 0 && typeof data.args[0] === 'string' && data.type && typeof data.type === 'number' && data.type === 1) {
+              const data = safeJSONParse(body);
+              if (
+                data &&
+                data.cmd &&
+                typeof data.cmd === "string" &&
+                data.cmd === "trs" &&
+                data.args &&
+                data.args.length > 0 &&
+                typeof data.args[0] === "string" &&
+                data.type &&
+                typeof data.type === "number" &&
+                data.type === 1
+              ) {
                 if (config.debug) {
                   console.log("拦截翻译请求", data);
                 }
@@ -179,7 +205,13 @@ class Translator {
               return body;
             },
             transformResponse(data: API.MootResponse, _) {
-              if (data.ret && typeof data.ret === 'string' && data.type && typeof data.type === 'number' && data.type === 1) {
+              if (
+                data.ret &&
+                typeof data.ret === "string" &&
+                data.type &&
+                typeof data.type === "number" &&
+                data.type === 1
+              ) {
                 if (config.debug) {
                   console.log("拦截翻译响应", data);
                 }
@@ -187,13 +219,13 @@ class Translator {
               }
               return data;
             },
-          }
+          },
         }
       );
       if (self.preTranslateEnabled) {
         hookRPGMakerPreTranslate((text) => {
           if (!text || text.length === 0) return text;
-          if (typeof text !== 'string') return text;
+          if (typeof text !== "string") return text;
           return self.interceptText(text);
         });
       }
@@ -201,34 +233,43 @@ class Translator {
   }
 
   private static normalizePunctuation(text: string): string {
-    if (!text || typeof text !== 'string') return text;
+    if (!text || typeof text !== "string") return text;
     // 无标点映射时直接返回（这里曾在热路径上每次都 Object.keys 建数组，属于纯浪费）
     if (!Translator.HAS_PUNCT_MAP) return text;
-    return text.replace(Translator.PUNCT_RE, ch => Translator.PUNCT_MAP[ch] ?? ch);
+    return text.replace(
+      Translator.PUNCT_RE,
+      (ch) => Translator.PUNCT_MAP[ch] ?? ch
+    );
   }
 
   // ==================== 数据构建 ====================
 
-  private _buildInto(target: Data.TranslationData, rules: Data.TranslationRule[]) {
+  private _buildInto(
+    target: Data.TranslationData,
+    rules: Data.TranslationRule[]
+  ) {
     const exactMap = new Map<string, string>();
     const regexRules: Array<{
       pattern: RegExp;
-      replacement: string
+      replacement: string;
     }> = [];
 
     for (const rule of rules) {
-      const source = typeof rule.source === 'string'
-        ? Translator.normalizePunctuation(rule.source)
-        : rule.source;
+      const source =
+        typeof rule.source === "string"
+          ? Translator.normalizePunctuation(rule.source)
+          : rule.source;
       const target = Translator.normalizePunctuation(rule.target);
-      if (typeof source === 'string') {
+      if (typeof source === "string") {
         exactMap.set(source, target);
       } else if (source instanceof RegExp) {
         regexRules.push({ pattern: source, replacement: target });
       }
     }
 
-    regexRules.sort((a, b) => b.pattern.source.length - a.pattern.source.length);
+    regexRules.sort(
+      (a, b) => b.pattern.source.length - a.pattern.source.length
+    );
     target.exactMap = exactMap;
     target.regexRules = regexRules;
     target.ruleCount = exactMap.size + regexRules.length;
@@ -244,7 +285,9 @@ class Translator {
     for (const [k, v] of this.userData.exactMap) mergedExact.set(k, v);
     mergedRegex.push(...this.userData.regexRules);
 
-    mergedRegex.sort((a, b) => b.pattern.source.length - a.pattern.source.length);
+    mergedRegex.sort(
+      (a, b) => b.pattern.source.length - a.pattern.source.length
+    );
 
     this.translationData = {
       exactMap: mergedExact,
@@ -266,7 +309,10 @@ class Translator {
       let merged: RegExp | null = null;
       try {
         merged = new RegExp(
-          rules.slice(i, end).map(r => `(?:${r.pattern.source})`).join('|')
+          rules
+            .slice(i, end)
+            .map((r) => `(?:${r.pattern.source})`)
+            .join("|")
         );
       } catch {
         merged = null; // 合并失败 → 该块逐条匹配，保证不漏规则
@@ -288,9 +334,9 @@ class Translator {
   // ==================== 核心翻译流程 ====================
 
   public interceptText(text: string): string {
-    if (!text || typeof text !== 'string') return text;
+    if (!text || typeof text !== "string") return text;
     if (text.length === 0) return text;
-    if (typeof text !== 'string') return text;
+    if (typeof text !== "string") return text;
 
     const rawText = text.trim();
     let text_ = stripControlChars(rawText);
@@ -299,7 +345,7 @@ class Translator {
       !text_ ||
       text_.length < 2 ||
       text_.length > 500 ||
-      this.isSkip(text_)   // 跳过检查
+      this.isSkip(text_) // 跳过检查
     ) {
       return text;
     }
@@ -333,7 +379,10 @@ class Translator {
       return result;
     }
     if (config.debug) {
-      console.log("未翻译文本", text_.length > 50 ? text_.slice(0, 50) + "..." : text_);
+      console.log(
+        "未翻译文本",
+        text_.length > 50 ? text_.slice(0, 50) + "..." : text_
+      );
     }
 
     // 5. 未命中 → 忽略 + 触发 AI
@@ -354,14 +403,14 @@ class Translator {
    * 否则命中缓存会把原文替换成空串，游戏里直接丢字。
    */
   public addCache(text: string, result: string = ""): void {
-    if (!text || typeof text !== 'string') return;
+    if (!text || typeof text !== "string") return;
     text = text.trim();
     if (!text) return;
 
     const normalized = Translator.normalizePunctuation(text);
     this.bloom.add(normalized);
 
-    const value = (result || '').trim();
+    const value = (result || "").trim();
     if (value && value !== text) {
       cache.set(normalized, value, true);
       this.missStreak = 0;
@@ -395,14 +444,14 @@ class Translator {
     }
 
     this.CONTROL_REGEX.lastIndex = 0;
-    return parts.join('');
+    return parts.join("");
   }
 
   /**
    * 查找匹配的规则
    */
   private doFix(text: string): string {
-    if (!text || typeof text !== 'string') return text;
+    if (!text || typeof text !== "string") return text;
     if (cache.isIgnored(text)) return text;
     if (isResourcePath(text)) return text;
 
@@ -455,7 +504,10 @@ class Translator {
       case Language.zh_CN:
       case Language.zh_TW:
         //匹配若是全是中文但不包含日文假名，才跳过
-        return /[\u4E00-\u9FFF]/.test(text) && !/[\u3040-\u309F\u30A0-\u30FF]/.test(text);
+        return (
+          /[\u4E00-\u9FFF]/.test(text) &&
+          !/[\u3040-\u309F\u30A0-\u30FF]/.test(text)
+        );
       case Language.en:
         return /^[\x20-\x7E]+$/.test(text) && /[a-zA-Z]/.test(text);
       case Language.ja:
@@ -468,13 +520,21 @@ class Translator {
   // ==================== AI 翻译学习 ====================
 
   fixAITranslation(original: string, aiResult: string): string {
-    if (original === null || original === undefined) return aiResult || '';
-    if (aiResult === null || aiResult === undefined) return original || '';
-    if (typeof original !== 'string') {
-      try { original = String(original); } catch { return aiResult; }
+    if (original === null || original === undefined) return aiResult || "";
+    if (aiResult === null || aiResult === undefined) return original || "";
+    if (typeof original !== "string") {
+      try {
+        original = String(original);
+      } catch {
+        return aiResult;
+      }
     }
-    if (typeof aiResult !== 'string') {
-      try { aiResult = String(aiResult); } catch { return original; }
+    if (typeof aiResult !== "string") {
+      try {
+        aiResult = String(aiResult);
+      } catch {
+        return original;
+      }
     }
     if (original === aiResult) return aiResult;
 
@@ -503,7 +563,7 @@ class Translator {
   private _learnTranslation(original: string, translated: string): void {
     if (!original || !translated) return;
     if (original === translated) return;
-    if (typeof original !== 'string' || typeof translated !== 'string') return;
+    if (typeof original !== "string" || typeof translated !== "string") return;
 
     const existing = cache.get(original);
     if (existing === undefined) {
@@ -517,13 +577,18 @@ class Translator {
 
     if (!this.userData.exactMap.has(original)) {
       this.userData.exactMap.set(original, translated);
-      this.userData.ruleCount = this.userData.exactMap.size + this.userData.regexRules.length;
+      this.userData.ruleCount =
+        this.userData.exactMap.size + this.userData.regexRules.length;
       this.translationData.exactMap.set(original, translated);
       this.translationData.ruleCount =
-        this.translationData.exactMap.size + this.translationData.regexRules.length;
+        this.translationData.exactMap.size +
+        this.translationData.regexRules.length;
       this.aiLearnedCount++;
       if (this.aiLearnedCount % 10 === 0) {
-        logger.addLog(`[AI学习] 已积累 ${this.aiLearnedCount} 条`, LogLevel.DEBUG);
+        logger.addLog(
+          `[AI学习] 已积累 ${this.aiLearnedCount} 条`,
+          LogLevel.DEBUG
+        );
       }
     }
   }
@@ -541,8 +606,8 @@ class Translator {
   addAIFixRule(aaa: string | RegExp, bbb: string | RegExp, ccc: string): void {
     // 形如 "/\d+日目/" 的字符串也必须识别为正则，
     // 否则会被当成普通字符串做全等比较而永远匹配不上
-    const parsedAaa = typeof aaa === 'string' ? parseRegex(aaa) : aaa;
-    const parsedBbb = typeof bbb === 'string' ? parseRegex(bbb) : bbb;
+    const parsedAaa = typeof aaa === "string" ? parseRegex(aaa) : aaa;
+    const parsedBbb = typeof bbb === "string" ? parseRegex(bbb) : bbb;
     aiFixRules.addRule({
       aaa: parsedAaa,
       bbb: parsedBbb,
@@ -563,8 +628,8 @@ class Translator {
     aiFixRules.clear();
   }
 
-  exportAIFixRules(format: 'json' | 'csv' = 'json') {
-    if (format === 'csv') return aiFixRules.exportCSV();
+  exportAIFixRules(format: "json" | "csv" = "json") {
+    if (format === "csv") return aiFixRules.exportCSV();
     return aiFixRules.exportJSON();
   }
 
@@ -580,35 +645,42 @@ class Translator {
    *  4. { "原文": "译文" } 对象格式 → 翻译规则
    */
   async loadUniversalFile(file: File): Promise<{
-    type: 'translation' | 'aiFix' | 'mixed';
+    type: "translation" | "aiFix" | "mixed";
     translationCount: number;
     aiFixCount: number;
   }> {
     const ext = getFileType(file.name);
     let rawData: any;
     // ---- 读取文件 ----
-    if (ext === 'json') {
+    if (ext === "json") {
       const text = await readFileAsText(file);
       rawData = safeJSONParse(text);
-      if (!rawData) throw new Error('JSON 解析失败');
-    } else if (ext === 'csv' || ext === 'tsv') {
+      if (!rawData) throw new Error("JSON 解析失败");
+    } else if (ext === "csv" || ext === "tsv") {
       rawData = await readFileAsText(file);
-      const delimiter = ext === 'csv' ? ',' : '\t';
+      const delimiter = ext === "csv" ? "," : "\t";
       rawData = parseDelimited(rawData, delimiter);
-    } else if (ext === 'xlsx' || ext === 'xls') {
+    } else if (ext === "xlsx" || ext === "xls") {
       rawData = await parseXLSX(file);
     } else {
       throw new Error(`不支持的文件格式: .${ext}`);
     }
     if (config.debug) {
-      console.log(`[MToolTranslatorPlugin][Upload] 文件: ${file.name} (${ext})`, rawData);
+      console.log(
+        `[MToolTranslatorPlugin][Upload] 文件: ${file.name} (${ext})`,
+        rawData
+      );
     }
     // ---- 判断格式并分发 ----
     return this._dispatchFileData(rawData, file.name, ext);
   }
 
-  private _dispatchFileData(rawData: any, fileName: string, ext: string): {
-    type: 'translation' | 'aiFix' | 'mixed';
+  private _dispatchFileData(
+    rawData: any,
+    fileName: string,
+    ext: string
+  ): {
+    type: "translation" | "aiFix" | "mixed";
     translationCount: number;
     aiFixCount: number;
   } {
@@ -619,11 +691,14 @@ class Translator {
       this._buildInto(this.userData, rules);
       this._mergeToRuntime();
       this._rebuildBloom();
-      logger.addLog(`CollData 加载成功: ${fileName}（${rules.length} 条翻译规则）`, LogLevel.SUCCESS);
+      logger.addLog(
+        `CollData 加载成功: ${fileName}（${rules.length} 条翻译规则）`,
+        LogLevel.SUCCESS
+      );
       return {
-        type: 'translation',
+        type: "translation",
         translationCount: rules.length,
-        aiFixCount: 0
+        aiFixCount: 0,
       };
     }
 
@@ -633,14 +708,21 @@ class Translator {
     }
 
     // === 对象格式 { "原文": "译文" } ===
-    if (ext == "json" && typeof rawData === 'object' && rawData !== null) {
+    if (ext == "json" && typeof rawData === "object" && rawData !== null) {
       const rules = parseJSON(rawData);
       if (rules.length > 0) {
         this._buildInto(this.userData, rules);
         this._mergeToRuntime();
         this._rebuildBloom();
-        logger.addLog(`翻译文件加载成功: ${fileName}（${rules.length} 条）`, LogLevel.SUCCESS);
-        return { type: 'translation', translationCount: rules.length, aiFixCount: 0 };
+        logger.addLog(
+          `翻译文件加载成功: ${fileName}（${rules.length} 条）`,
+          LogLevel.SUCCESS
+        );
+        return {
+          type: "translation",
+          translationCount: rules.length,
+          aiFixCount: 0,
+        };
       }
     }
 
@@ -650,18 +732,21 @@ class Translator {
   /**
    * 核心分发逻辑：分析数组数据，自动分流到翻译规则或 AI Fix 规则
    */
-  private _classifyAndLoad(rows: any[][], fileName: string): {
-    type: 'translation' | 'aiFix' | 'mixed';
+  private _classifyAndLoad(
+    rows: any[][],
+    fileName: string
+  ): {
+    type: "translation" | "aiFix" | "mixed";
     translationCount: number;
     aiFixCount: number;
   } {
     // 过滤有效行
-    const validRows = rows.filter(r =>
-      Array.isArray(r) && r.length >= 2 && r[0] && String(r[0]).trim()
+    const validRows = rows.filter(
+      (r) => Array.isArray(r) && r.length >= 2 && r[0] && String(r[0]).trim()
     );
 
     if (validRows.length === 0) {
-      throw new Error('文件中没有有效数据行');
+      throw new Error("文件中没有有效数据行");
     }
 
     // 抽样检测：前 20 行中，有多少是"三列格式"
@@ -679,7 +764,9 @@ class Translator {
       }
     }
     if (config.debug) {
-      console.log(`[MToolTranslatorPlugin][Upload] 采样 ${sampleSize} 行: 三列=${threeColumnCount}, 两列=${twoColumnCount}`);
+      console.log(
+        `[MToolTranslatorPlugin][Upload] 采样 ${sampleSize} 行: 三列=${threeColumnCount}, 两列=${twoColumnCount}`
+      );
     }
 
     // 判断结果
@@ -695,7 +782,7 @@ class Translator {
       for (const row of validRows) {
         if (row.length >= 3 && row[2]) {
           const aaa = String(row[0]).trim();
-          const bbb = row[1] ? String(row[1]).trim() : '';
+          const bbb = row[1] ? String(row[1]).trim() : "";
           const ccc = String(row[2]).trim();
           if (aaa && ccc) {
             aiRules.push({ aaa, bbb, ccc, _isRegex: false });
@@ -705,8 +792,10 @@ class Translator {
       aiFixRules.clear();
       aiFixRules.addRules(aiRules);
       aiFixCount = aiRules.length;
-      logger.addLog(`AI Fix 规则加载成功: ${fileName}（${aiFixCount} 条）`, LogLevel.SUCCESS);
-
+      logger.addLog(
+        `AI Fix 规则加载成功: ${fileName}（${aiFixCount} 条）`,
+        LogLevel.SUCCESS
+      );
     } else if (isMixed) {
       // 混合：三列的走 AI Fix，两列的走翻译规则
       const transRules: Data.TranslationRule[] = [];
@@ -715,13 +804,13 @@ class Translator {
       for (const row of validRows) {
         if (row.length >= 3 && row[2] && String(row[2]).trim()) {
           const aaa = String(row[0]).trim();
-          const bbb = row[1] ? String(row[1]).trim() : '';
+          const bbb = row[1] ? String(row[1]).trim() : "";
           const ccc = String(row[2]).trim();
           if (aaa && ccc) aiRules.push({ aaa, bbb, ccc, _isRegex: false });
         } else if (row.length >= 2 && row[1]) {
           transRules.push({
             source: String(row[0]).trim(),
-            target: String(row[1]).trim()
+            target: String(row[1]).trim(),
           });
         }
       }
@@ -742,24 +831,29 @@ class Translator {
         `混合规则加载成功: ${fileName}（翻译 ${translationCount} + AI Fix ${aiFixCount}）`,
         LogLevel.SUCCESS
       );
-
     } else {
       // 全部作为翻译规则
       const transRules: Data.TranslationRule[] = [];
       for (const row of validRows) {
         if (row.length >= 2 && row[1]) {
-          transRules.push({ source: String(row[0]).trim(), target: String(row[1]).trim() });
+          transRules.push({
+            source: String(row[0]).trim(),
+            target: String(row[1]).trim(),
+          });
         }
       }
       this._buildInto(this.userData, transRules);
       this._mergeToRuntime();
       this._rebuildBloom();
       translationCount = transRules.length;
-      logger.addLog(`翻译文件加载成功: ${fileName}（${translationCount} 条）`, LogLevel.SUCCESS);
+      logger.addLog(
+        `翻译文件加载成功: ${fileName}（${translationCount} 条）`,
+        LogLevel.SUCCESS
+      );
     }
 
     return {
-      type: isAIFix ? 'aiFix' : (isMixed ? 'mixed' : 'translation'),
+      type: isAIFix ? "aiFix" : isMixed ? "mixed" : "translation",
       translationCount,
       aiFixCount,
     };
@@ -788,9 +882,9 @@ class Translator {
       const path = await getPath(fileName);
       const type = getFileType(path);
       let rawData: any;
-      if (type === 'json') {
+      if (type === "json") {
         rawData = await getJSONFileData(path);
-      } else if (type === 'csv' || type === 'tsv') {
+      } else if (type === "csv" || type === "tsv") {
         rawData = await getCsvFileData(path);
       } else {
         logger.addLog(`不支持的文件类型: ${type}`, LogLevel.ERROR);
@@ -801,9 +895,15 @@ class Translator {
       this._buildInto(this.userData, rules);
       this._mergeToRuntime();
       this._rebuildBloom();
-      logger.addLog(`翻译文件加载成功: ${fileName}（${rules.length} 条规则）`, LogLevel.SUCCESS);
+      logger.addLog(
+        `翻译文件加载成功: ${fileName}（${rules.length} 条规则）`,
+        LogLevel.SUCCESS
+      );
     } catch (e: any) {
-      logger.addLog(`加载翻译文件失败 [${fileName}]: ${e.message}`, LogLevel.ERROR);
+      logger.addLog(
+        `加载翻译文件失败 [${fileName}]: ${e.message}`,
+        LogLevel.ERROR
+      );
     }
   }
 
@@ -812,7 +912,10 @@ class Translator {
       const result = await this.loadUniversalFile(file);
       return result.translationCount > 0 || result.aiFixCount > 0;
     } catch (e: any) {
-      logger.addLog(`文件加载失败 [${file.name}]: ${e.message}`, LogLevel.ERROR);
+      logger.addLog(
+        `文件加载失败 [${file.name}]: ${e.message}`,
+        LogLevel.ERROR
+      );
       return false;
     }
   }
@@ -825,7 +928,9 @@ class Translator {
       threshold
     );
     const mergedRegex = [...regexRules, ...this.userData.regexRules];
-    mergedRegex.sort((a, b) => b.pattern.source.length - a.pattern.source.length);
+    mergedRegex.sort(
+      (a, b) => b.pattern.source.length - a.pattern.source.length
+    );
 
     this.userData = {
       exactMap,
@@ -839,7 +944,7 @@ class Translator {
 
     logger.addLog(
       `规则压缩完成: ${stats.originalCount} → ${stats.compactedCount} 条 ` +
-      `（移除 ${stats.rulesRemoved} 条，生成 ${stats.rulesCreated} 条正则，压缩率 ${stats.compressionRatio}%）`,
+        `（移除 ${stats.rulesRemoved} 条，生成 ${stats.rulesCreated} 条正则，压缩率 ${stats.compressionRatio}%）`,
       LogLevel.SUCCESS
     );
     return stats;
@@ -852,7 +957,7 @@ class Translator {
     // 走 doFix 而非逐条全量正则：复用 Bloom 前置过滤 + 分块快筛，
     // 上万条文本时差别是数量级的
     for (const text of texts) {
-      if (!text || typeof text !== 'string' || text.length < 2) continue;
+      if (!text || typeof text !== "string" || text.length < 2) continue;
       if (this.isSkip(text)) continue;
 
       const translated = this.doFix(text);
@@ -866,10 +971,14 @@ class Translator {
         this.userData.exactMap.set(text, translated);
       }
     }
-    this.userData.ruleCount = this.userData.exactMap.size + this.userData.regexRules.length;
+    this.userData.ruleCount =
+      this.userData.exactMap.size + this.userData.regexRules.length;
     this.preTranslated = true;
     this._mergeToRuntime();
-    logger.addLog(`预翻译完成: ${result.size} 条文本已翻译并预热到缓存`, LogLevel.SUCCESS);
+    logger.addLog(
+      `预翻译完成: ${result.size} 条文本已翻译并预热到缓存`,
+      LogLevel.SUCCESS
+    );
     return result;
   }
 
@@ -909,9 +1018,11 @@ class Translator {
         }
       }
       if (newCount > 0) {
-        this.userData.ruleCount = this.userData.exactMap.size + this.userData.regexRules.length;
+        this.userData.ruleCount =
+          this.userData.exactMap.size + this.userData.regexRules.length;
         this.translationData.ruleCount =
-          this.translationData.exactMap.size + this.translationData.regexRules.length;
+          this.translationData.exactMap.size +
+          this.translationData.regexRules.length;
         this.aiLearnedCount += newCount;
         logger.addLog(`AI 翻译新增 ${newCount} 条规则`, LogLevel.SUCCESS);
       }
@@ -920,7 +1031,7 @@ class Translator {
     }
   }
 
-  private cacheStorageKey = 'LocalTranslatorGameCache';
+  private cacheStorageKey = "LocalTranslatorGameCache";
 
   // ==================== 持久化 ====================
 
@@ -929,7 +1040,9 @@ class Translator {
     else cache.saveToStorage(this.cacheStorageKey);
   }
 
-  private _loadStorageCache() { cache.loadFromStorage(this.cacheStorageKey); }
+  private _loadStorageCache() {
+    cache.loadFromStorage(this.cacheStorageKey);
+  }
 
   /** 仅清理本插件自己写入的键，绝不触碰宿主页面/游戏的其它 localStorage 数据 */
   private _clearOwnStorage() {
@@ -938,11 +1051,11 @@ class Translator {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         // 只清翻译数据键；主缓存键（LocalTranslatorGameCache）由调用方单独管理
-        if (k && k.startsWith('cache_')) keys.push(k);
+        if (k && k.startsWith("cache_")) keys.push(k);
       }
-      keys.forEach(k => localStorage.removeItem(k));
+      keys.forEach((k) => localStorage.removeItem(k));
     } catch (e) {
-      console.warn('[Translator] 清理旧缓存失败:', e);
+      console.warn("[Translator] 清理旧缓存失败:", e);
     }
   }
 
@@ -955,7 +1068,7 @@ class Translator {
     if (!config.user.autoLoad.userConfig) return;
     const data = {
       exactMap: Array.from(this.userData.exactMap.entries()),
-      regexRules: this.userData.regexRules.map(r => ({
+      regexRules: this.userData.regexRules.map((r) => ({
         pattern: r.pattern.source,
         flags: r.pattern.flags,
         replacement: r.replacement,
@@ -964,9 +1077,12 @@ class Translator {
     try {
       // 注意：这里曾经调用 localStorage.clear()，会连带清空游戏存档与插件配置
       this._clearOwnStorage();
-      localStorage.setItem(`cache_${config.user.fileName.userConfig}`, JSON.stringify(data));
+      localStorage.setItem(
+        `cache_${config.user.fileName.userConfig}`,
+        JSON.stringify(data)
+      );
     } catch (e) {
-      console.warn('[Translator] 保存翻译数据失败:', e);
+      console.warn("[Translator] 保存翻译数据失败:", e);
     }
   }
 
@@ -999,9 +1115,8 @@ class Translator {
 
   exportTranslationData(format: "json" | "csv" = "json"): {
     data: any;
-    fileName: string
+    fileName: string;
   } {
-
     const allExact = new Map<string, string>();
     for (const [k, v] of cache.exportEntries()) {
       if (!allExact.has(k)) allExact.set(k, v);
@@ -1012,24 +1127,24 @@ class Translator {
       for (const [k, v] of allExact) obj[k] = v;
       return {
         data: obj,
-        fileName: timestampFileName(`Translation_${getGameName()}`, "json")
+        fileName: timestampFileName(`Translation_${getGameName()}`, "json"),
       };
     }
 
     if (format === "csv") {
-      const rows = [['source', 'target']];
+      const rows = [["source", "target"]];
       for (const [k, v] of allExact) rows.push([k, v]);
       return {
         data: rows,
-        fileName: timestampFileName(`Translation_${getGameName()}`, "csv")
+        fileName: timestampFileName(`Translation_${getGameName()}`, "csv"),
       };
     }
 
-    const rows = [['source', 'target']];
+    const rows = [["source", "target"]];
     for (const [k, v] of allExact) rows.push([k, v]);
     return {
       data: rows,
-      fileName: timestampFileName(`Translation_${getGameName()}`, "tsv")
+      fileName: timestampFileName(`Translation_${getGameName()}`, "tsv"),
     };
   }
 
@@ -1046,7 +1161,7 @@ class Translator {
     this.compactStats = null;
     this.aiLearnedCount = 0;
     this.missStreak = 0;
-    logger.addLog('所有用户翻译数据已重置（默认规则保留）', LogLevel.WARNING);
+    logger.addLog("所有用户翻译数据已重置（默认规则保留）", LogLevel.WARNING);
   }
 }
 

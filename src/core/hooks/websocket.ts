@@ -1,13 +1,13 @@
-import logger, { LogLevel } from '../logger';
-import translator from '../translator';
-import { isResourcePath, safeJSONParse } from '../../utils';
-import config from '../../config';
+import logger, { LogLevel } from "../logger";
+import translator from "../translator";
+import { isResourcePath, safeJSONParse } from "../../utils";
+import config from "../../config";
 
 type PendingRequest = {
   original: string;
   timestamp: number;
   resolve: (fixed: string) => void;
-}
+};
 
 const PENDING_CLEANUP_INTERVAL = 5000;
 
@@ -25,23 +25,27 @@ export class WebSocketHook {
 
   constructor(options: Options.WebSocketHookOptions = {}) {
     this.options = {
-      targetURL: options.targetURL || '127.0.0.1:64002',
+      targetURL: options.targetURL || "127.0.0.1:64002",
       enableRequestFix: options.enableRequestFix ?? true,
       enableResponseFix: options.enableResponseFix ?? true,
-      translateFn: options.translateFn || ((text: string) => {
-        try {
-          return translator.interceptText(text);
-        } catch {
-          return null;
-        }
-      }),
-      fixResponseFn: options.fixResponseFn || ((orig, ai) => {
-        try {
-          return translator.processAIResponse(orig, ai);
-        } catch {
-          return ai;
-        }
-      }),
+      translateFn:
+        options.translateFn ||
+        ((text: string) => {
+          try {
+            return translator.interceptText(text);
+          } catch {
+            return null;
+          }
+        }),
+      fixResponseFn:
+        options.fixResponseFn ||
+        ((orig, ai) => {
+          try {
+            return translator.processAIResponse(orig, ai);
+          } catch {
+            return ai;
+          }
+        }),
       pendingTimeout: options.pendingTimeout || 30000,
     };
   }
@@ -57,11 +61,11 @@ export class WebSocketHook {
 
   install(): boolean {
     if (this.hooked) {
-      logger.addLog('[WS] 已安装，跳过重复安装', LogLevel.WARNING);
+      logger.addLog("[WS] 已安装，跳过重复安装", LogLevel.WARNING);
       return false;
     }
-    if (typeof window.WebSocket === 'undefined') {
-      logger.addLog('[WS] WebSocket 不可用', LogLevel.ERROR);
+    if (typeof window.WebSocket === "undefined") {
+      logger.addLog("[WS] WebSocket 不可用", LogLevel.ERROR);
       return false;
     }
 
@@ -70,7 +74,9 @@ export class WebSocketHook {
     const opts = this.options;
 
     if (config.debug) {
-      console.log(`[MToolTranslatorPlugin][WS] ✅ WebSocket Hook 安装中 (target=${opts.targetURL})`);
+      console.log(
+        `[MToolTranslatorPlugin][WS] ✅ WebSocket Hook 安装中 (target=${opts.targetURL})`
+      );
     }
 
     const HookedWebSocket = class extends this.OriginalWebSocket {
@@ -80,7 +86,11 @@ export class WebSocketHook {
         const isTarget = urlStr.includes(opts.targetURL);
 
         if (config.debug) {
-          console.log(`[MToolTranslatorPlugin][WS] 🔌 连接: ${urlStr}${isTarget ? ' [目标]' : ''}`);
+          console.log(
+            `[MToolTranslatorPlugin][WS] 🔌 连接: ${urlStr}${
+              isTarget ? " [目标]" : ""
+            }`
+          );
         }
 
         // 非目标连接：不 hook
@@ -90,21 +100,29 @@ export class WebSocketHook {
 
         // 启动定期清理
         if (!self.cleanupTimer) {
-          self.cleanupTimer = setInterval(() => self._cleanupPending(), PENDING_CLEANUP_INTERVAL);
+          self.cleanupTimer = setInterval(
+            () => self._cleanupPending(),
+            PENDING_CLEANUP_INTERVAL
+          );
         }
 
         // ---- Hook send ----
         const originalSend = (this as any).send.bind(this);
         (this as any).send = function (...sendArgs: any[]) {
           const data = sendArgs[0];
-          if (typeof data === 'string' && opts.enableRequestFix) {
+          if (typeof data === "string" && opts.enableRequestFix) {
             const intercepted = self._interceptRequest(data, (fixedRet) => {
               // 通过伪造 message 事件回送
               self._dispatchFakeMessage(fixedRet, this as WebSocket);
             });
             if (intercepted) {
               if (config.debug) {
-                console.log(`[MToolTranslatorPlugin][WS] 🚫 send 已拦截: ${data.slice(0, 40)}`);
+                console.log(
+                  `[MToolTranslatorPlugin][WS] 🚫 send 已拦截: ${data.slice(
+                    0,
+                    40
+                  )}`
+                );
               }
               return; // 不发网络请求
             }
@@ -114,13 +132,13 @@ export class WebSocketHook {
 
         // ---- Hook onmessage ----
         const wsRef = this as unknown as WebSocket;
-        wsRef.addEventListener('message', (event: MessageEvent) => {
+        wsRef.addEventListener("message", (event: MessageEvent) => {
           if (!opts.enableResponseFix) return;
           self._interceptResponse(event);
         });
 
         // ---- 关闭时清理 ----
-        wsRef.addEventListener('close', () => {
+        wsRef.addEventListener("close", () => {
           self.instances.delete(wsRef);
           if (self.instances.size === 0 && self.cleanupTimer) {
             clearInterval(self.cleanupTimer);
@@ -156,29 +174,34 @@ export class WebSocketHook {
     }
 
     if (config.debug) {
-      console.log('[MToolTranslatorPlugin][WS] ↩️ WebSocket Hook 已还原');
+      console.log("[MToolTranslatorPlugin][WS] ↩️ WebSocket Hook 已还原");
     }
-    logger.addLog('[WS] Hook 已还原', LogLevel.INFO);
+    logger.addLog("[WS] Hook 已还原", LogLevel.INFO);
     return true;
   }
 
   // ==================== 请求拦截 ====================
 
-  private _interceptRequest(data: string, _onIntercept: (ret: any) => void): boolean {
+  private _interceptRequest(
+    data: string,
+    _onIntercept: (ret: any) => void
+  ): boolean {
     let parsed: any;
     try {
       parsed = safeJSONParse(data);
-    } catch { return false; }
+    } catch {
+      return false;
+    }
     // 非对象 / 解析失败（safeJSONParse 返回 null）时直接放行，避免读取属性抛错
-    if (!parsed || typeof parsed !== 'object') return false;
+    if (!parsed || typeof parsed !== "object") return false;
 
     // 支持 cmd: 'trs' 和 'tr' 两种格式
     const cmd = parsed.cmd || parsed.command;
-    if (cmd !== 'trs' && cmd !== 'tr') return false;
+    if (cmd !== "trs" && cmd !== "tr") return false;
     if (!Array.isArray(parsed.args) || parsed.args.length === 0) return false;
 
     const originalText: string = parsed.args[0];
-    if (!originalText || typeof originalText !== 'string') return false;
+    if (!originalText || typeof originalText !== "string") return false;
 
     // 资源路径放行
     if (isResourcePath(originalText)) {
@@ -199,7 +222,12 @@ export class WebSocketHook {
       };
 
       if (config.debug) {
-        console.log(`[MToolTranslatorPlugin][WS] ✅ 本地翻译命中: "${originalText.slice(0, 20)}..." → "${localResult.slice(0, 30)}..."`);
+        console.log(
+          `[MToolTranslatorPlugin][WS] ✅ 本地翻译命中: "${originalText.slice(
+            0,
+            20
+          )}..." → "${localResult.slice(0, 30)}..."`
+        );
       }
 
       // 异步派发伪造响应
@@ -212,17 +240,23 @@ export class WebSocketHook {
 
     // 未命中本地 → 记录 pending，等响应回来再修复。
     // 无 id 或同毫秒多发时用自增 id，避免 Date.now() 撞车互相覆盖
-    const reqId = (typeof parsed.id === 'number' || typeof parsed.id === 'string')
-      ? parsed.id
-      : `__auto_${++this.autoId}`;
+    const reqId =
+      typeof parsed.id === "number" || typeof parsed.id === "string"
+        ? parsed.id
+        : `__auto_${++this.autoId}`;
     this.pendingMap.set(reqId, {
       original: originalText,
       timestamp: Date.now(),
-      resolve: () => { },
+      resolve: () => {},
     });
 
     if (config.debug) {
-      console.log(`[MToolTranslatorPlugin][WS] ⏳ 未命中本地，等待 AI 响应: "${originalText.slice(0, 20)}..."`);
+      console.log(
+        `[MToolTranslatorPlugin][WS] ⏳ 未命中本地，等待 AI 响应: "${originalText.slice(
+          0,
+          20
+        )}..."`
+      );
     }
     return false; // 放行到网络
   }
@@ -251,27 +285,37 @@ export class WebSocketHook {
   private _interceptResponse(event: MessageEvent): void {
     // 自己派发的伪造事件不再二次处理，否则会无限重派发
     if (this.dispatching) return;
-    if (typeof event.data !== 'string') return;
+    if (typeof event.data !== "string") return;
 
     let parsed: any;
     try {
       parsed = safeJSONParse(event.data);
-    } catch { return; }
-    if (!parsed || typeof parsed !== 'object') return;
-    if (typeof parsed.ret !== 'string') return;
+    } catch {
+      return;
+    }
+    if (!parsed || typeof parsed !== "object") return;
+    if (typeof parsed.ret !== "string") return;
 
     const pending = this._takePending(parsed.id);
-    const original = pending?.original || '';
+    const original = pending?.original || "";
 
-    const fixed = this.options.fixResponseFn(original, parsed.ret || '');
+    const fixed = this.options.fixResponseFn(original, parsed.ret || "");
 
     // 与我们无关、且无需修正的响应直接放行，避免无意义的重新派发
     if (!pending && fixed === parsed.ret) return;
 
     if (fixed && fixed !== parsed.ret && config.debug) {
-      console.log(`[MToolTranslatorPlugin][WS] ✏️ AI 译文已修复: "${parsed.ret.slice(0, 20)}..." → "${fixed.slice(0, 30)}..."`);
+      console.log(
+        `[MToolTranslatorPlugin][WS] ✏️ AI 译文已修复: "${parsed.ret.slice(
+          0,
+          20
+        )}..." → "${fixed.slice(0, 30)}..."`
+      );
       logger.addLog(
-        `[WS] AI 译文修复: "${parsed.ret.slice(0, 20)}..." → "${fixed.slice(0, 30)}..."`,
+        `[WS] AI 译文修复: "${parsed.ret.slice(0, 20)}..." → "${fixed.slice(
+          0,
+          30
+        )}..."`,
         LogLevel.DEBUG
       );
     }
@@ -287,10 +331,10 @@ export class WebSocketHook {
   // ==================== 伪造消息派发 ====================
 
   private _dispatchFakeMessage(response: any, target?: WebSocket): void {
-    const event = new MessageEvent('message', {
+    const event = new MessageEvent("message", {
       data: JSON.stringify(response),
-      origin: 'ws://127.0.0.1:64002',
-      lastEventId: '',
+      origin: "ws://127.0.0.1:64002",
+      lastEventId: "",
       source: null,
       ports: undefined as any,
     });
@@ -324,17 +368,25 @@ export class WebSocketHook {
       }
     }
     if (cleaned > 0 && config.debug) {
-      console.log(`[MToolTranslatorPlugin][WS] 🧹 清理 ${cleaned} 条超时 pending`);
+      console.log(
+        `[MToolTranslatorPlugin][WS] 🧹 清理 ${cleaned} 条超时 pending`
+      );
     }
   }
 
   // ==================== 公开查询 API ====================
 
-  get isHooked(): boolean { return this.hooked; }
+  get isHooked(): boolean {
+    return this.hooked;
+  }
 
-  get pendingCount(): number { return this.pendingMap.size; }
+  get pendingCount(): number {
+    return this.pendingMap.size;
+  }
 
-  clearPending(): void { this.pendingMap.clear(); }
+  clearPending(): void {
+    this.pendingMap.clear();
+  }
 
   getStats() {
     return {

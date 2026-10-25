@@ -1,10 +1,10 @@
-import config from '../config';
-import { debounce, safeJSONParse } from '../utils';
+import config from "../config";
+import { debounce, safeJSONParse } from "../utils";
 
 type lastCache = {
   text: string;
   result: string;
-}
+};
 
 class TranslatorCache {
   private cache: Map<string, string> = new Map();
@@ -49,16 +49,25 @@ class TranslatorCache {
   // ==================== 快速命中（3 级 LRU）====================
 
   private quickHit(text: string): string | undefined {
-    if (this.last1 && (this.last1.text === text || this.last1.result === text)) {
+    if (
+      this.last1 &&
+      (this.last1.text === text || this.last1.result === text)
+    ) {
       return this.last1.result;
     }
-    if (this.last2 && (this.last2.text === text || this.last2.result === text)) {
+    if (
+      this.last2 &&
+      (this.last2.text === text || this.last2.result === text)
+    ) {
       const tmp = this.last2;
       this.last2 = this.last1;
       this.last1 = tmp;
       return tmp.result;
     }
-    if (this.last3 && (this.last3.text === text || this.last3.result === text)) {
+    if (
+      this.last3 &&
+      (this.last3.text === text || this.last3.result === text)
+    ) {
       const tmp = this.last3;
       this.last3 = this.last2;
       this.last2 = this.last1;
@@ -77,7 +86,7 @@ class TranslatorCache {
   // ==================== 公开 API ====================
 
   get(key: string): string | undefined {
-    if (typeof key !== 'string') return undefined;
+    if (typeof key !== "string") return undefined;
     const quick = this.quickHit(key);
     if (quick !== undefined) {
       this.stats.hits++;
@@ -96,7 +105,7 @@ class TranslatorCache {
   }
 
   set(key: string, value: string, markLearned: boolean = false) {
-    if (typeof key !== 'string' || typeof value !== 'string') return;
+    if (typeof key !== "string" || typeof value !== "string") return;
     if (key === value) return;
     // 空译文绝不能入缓存：否则后续命中会把游戏原文替换成空字符串
     if (value.length === 0) return;
@@ -133,7 +142,7 @@ class TranslatorCache {
   }
 
   isIgnored(text: string): boolean {
-    if (typeof text !== 'string') return false;
+    if (typeof text !== "string") return false;
     if (this.ignoretext.has(text)) {
       this.stats.ignoreHits++;
       return true;
@@ -142,7 +151,7 @@ class TranslatorCache {
   }
 
   addIgnore(text: string) {
-    if (typeof text !== 'string' || text.length === 0) return;
+    if (typeof text !== "string" || text.length === 0) return;
     if (!this.ignoretext.has(text)) {
       // 无上限增长会吃满内存（长流程游戏可累积上万条未命中文本）
       if (this.ignoretext.size >= TranslatorCache.MAX_IGNORE) {
@@ -153,7 +162,10 @@ class TranslatorCache {
     }
     this.recentIgnored.push(text);
     if (this.recentIgnored.length > TranslatorCache.MAX_RECENT_IGNORED) {
-      this.recentIgnored.splice(0, this.recentIgnored.length - TranslatorCache.MAX_RECENT_IGNORED);
+      this.recentIgnored.splice(
+        0,
+        this.recentIgnored.length - TranslatorCache.MAX_RECENT_IGNORED
+      );
     }
   }
 
@@ -260,9 +272,12 @@ class TranslatorCache {
   // ==================== 持久化 ====================
   private _writeToStorage(key: string) {
     try {
-      localStorage.setItem(key, JSON.stringify(this._snapshot(TranslatorCache.MAX_SAVE_ENTRIES)));
+      localStorage.setItem(
+        key,
+        JSON.stringify(this._snapshot(TranslatorCache.MAX_SAVE_ENTRIES))
+      );
     } catch (e) {
-      console.warn('[Cache] 保存失败:', e);
+      console.warn("[Cache] 保存失败:", e);
     }
   }
 
@@ -283,18 +298,18 @@ class TranslatorCache {
       const data = safeJSONParse(raw);
       if (Array.isArray(data)) {
         data.forEach(([k, v]: [string, string]) => this.set(k, v));
-      } else if (typeof data === 'object') {
+      } else if (typeof data === "object") {
         Object.entries(data).forEach(([k, v]) => this.set(k, String(v)));
       }
     } catch (e) {
-      console.warn('[Cache] 加载失败:', e);
+      console.warn("[Cache] 加载失败:", e);
     }
   }
 
   get hitRate(): { hitRate: number; total: number } {
     const total = this.stats.hits + this.stats.misses;
     return {
-      hitRate: total > 0 ? +(this.stats.hits / total * 100).toFixed(2) : 0,
+      hitRate: total > 0 ? +((this.stats.hits / total) * 100).toFixed(2) : 0,
       total,
     };
   }

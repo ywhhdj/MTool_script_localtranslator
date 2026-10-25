@@ -1,6 +1,9 @@
-import logger, { LogLevel } from '../logger';
+import logger, { LogLevel } from "../logger";
 
-const originalMethods = new Map<string, { className: string; methodName: string; original: any }>();
+const originalMethods = new Map<
+  string,
+  { className: string; methodName: string; original: any }
+>();
 
 /**
  * 解析全局对象路径，支持 'Bitmap' 与 'PIXI.Text' / 'Phaser.GameObjects.Text' 这类点路径
@@ -8,8 +11,11 @@ const originalMethods = new Map<string, { className: string; methodName: string;
 function resolveGlobal(path: string): any {
   if (!path) return undefined;
   return path
-    .split('.')
-    .reduce<any>((acc, key) => (acc === null || acc === undefined ? undefined : acc[key]), window as any);
+    .split(".")
+    .reduce<any>(
+      (acc, key) => (acc === null || acc === undefined ? undefined : acc[key]),
+      window as any
+    );
 }
 
 /**
@@ -25,13 +31,19 @@ export function hookPrototype(
 ): void {
   const cls = resolveGlobal(className);
   if (!cls || !cls.prototype) {
-    logger.addLog(`[Hook] ${className}.prototype 不存在，跳过 ${methodName}`, LogLevel.WARNING);
+    logger.addLog(
+      `[Hook] ${className}.prototype 不存在，跳过 ${methodName}`,
+      LogLevel.WARNING
+    );
     return;
   }
 
   const original = cls.prototype[methodName];
-  if (typeof original !== 'function') {
-    logger.addLog(`[Hook] ${className}.${methodName} 不是函数，跳过`, LogLevel.WARNING);
+  if (typeof original !== "function") {
+    logger.addLog(
+      `[Hook] ${className}.${methodName} 不是函数，跳过`,
+      LogLevel.WARNING
+    );
     return;
   }
 
@@ -86,7 +98,6 @@ export function uninstallHook(className: string, methodName: string): boolean {
   return false;
 }
 
-
 /**
  * Hook 一个对象的 setter（用于属性赋值拦截）
  */
@@ -97,18 +108,28 @@ export function hookSetter(
 ): void {
   const cls = resolveGlobal(className);
   if (!cls || !cls.prototype) {
-    logger.addLog(`[Hook] ${className} 不存在，跳过 setter ${propertyName}`, LogLevel.WARNING);
+    logger.addLog(
+      `[Hook] ${className} 不存在，跳过 setter ${propertyName}`,
+      LogLevel.WARNING
+    );
     return;
   }
 
-  const descriptor = Object.getOwnPropertyDescriptor(cls.prototype, propertyName);
+  const descriptor = Object.getOwnPropertyDescriptor(
+    cls.prototype,
+    propertyName
+  );
   const originalSetter = descriptor?.set;
 
   Object.defineProperty(cls.prototype, propertyName, {
     get: descriptor?.get,
     set: function (this: any, value: any) {
       try {
-        const newValue = hookFn.call(this, originalSetter ? originalSetter.call(this, value) : undefined, value);
+        const newValue = hookFn.call(
+          this,
+          originalSetter ? originalSetter.call(this, value) : undefined,
+          value
+        );
         if (originalSetter) {
           originalSetter.call(this, newValue);
         } else {
@@ -116,7 +137,10 @@ export function hookSetter(
           (this as any)[`_${propertyName}`] = newValue;
         }
       } catch (e: any) {
-        logger.addLog(`[Hook] ${className}.${propertyName} setter 异常: ${e.message}`, LogLevel.ERROR);
+        logger.addLog(
+          `[Hook] ${className}.${propertyName} setter 异常: ${e.message}`,
+          LogLevel.ERROR
+        );
         if (originalSetter) originalSetter.call(this, value);
       }
     },
@@ -124,5 +148,7 @@ export function hookSetter(
     configurable: true,
   });
 
-  console.log(`[MToolTranslatorPlugin][Hook] ✅ ${className}.${propertyName} setter 已劫持`);
+  console.log(
+    `[MToolTranslatorPlugin][Hook] ✅ ${className}.${propertyName} setter 已劫持`
+  );
 }

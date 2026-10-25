@@ -6,7 +6,7 @@ import logger, { LogLevel } from '../core/logger';
 import cache from '../core/cache';
 import { saveJSONFile } from '../utils';
 import { EngineType } from '../typings/enum';
-import Icon from './Icon.vue';
+import Icon from './base/Icon.vue';
 import translator from '../core/translator';
 
 const subTab = ref<'basic' | 'engine' | 'ai'>('basic');

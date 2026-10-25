@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted } from 'vue';
 import logger, { type LogFilter, type LogEntry, LogLevel } from '../core/logger';
-import Icon from './Icon.vue';
+import Icon from './base/Icon.vue';
 
 const logs = logger.log_queue;
 const filter = ref<LogFilter>('total');

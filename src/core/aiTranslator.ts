@@ -1,6 +1,7 @@
-import config from '../config';
-import { rawFetch } from '../utils';
-import logger, { LogLevel } from './logger';
+import config from "../config";
+import { Role } from "../typings/enum";
+import { rawFetch } from "../utils";
+import logger, { LogLevel } from "./logger";
 
 const pendingRequests = new Map<string, Promise<string>>();
 const requestQueue: Array<() => void> = [];
@@ -17,9 +18,9 @@ const DEFAULT_SYSTEM_PROMPT = `你是一个专业的游戏本地化翻译引擎�
 6. 每次输入可能包含多行文本，逐行翻译，保持行数一致`;
 
 class AITranslator {
-  private baseURL: string = '';
-  private apiKey: string = '';
-  private model: string = '';
+  private baseURL: string = "";
+  private apiKey: string = "";
+  private model: string = "";
   private enabled: boolean = false;
 
   /**
@@ -53,10 +54,12 @@ class AITranslator {
   }
 
   updateConfig() {
-    this.baseURL = config.user.AI_BASE_URL.userConfig || config.user.AI_BASE_URL.default;
+    this.baseURL =
+      config.user.AI_BASE_URL.userConfig || config.user.AI_BASE_URL.default;
     this.apiKey = config.user.AI_KEY.userConfig || config.user.AI_KEY.default;
     this.model = config.user.model.userConfig || config.user.model.default;
-    this.enabled = config.user.enableAI.userConfig && !!this.apiKey && !!this.baseURL;
+    this.enabled =
+      config.user.enableAI.userConfig && !!this.apiKey && !!this.baseURL;
   }
 
   get isAvailable(): boolean {
@@ -95,7 +98,8 @@ class AITranslator {
     if (!this.isAvailable || texts.length === 0) return results;
 
     const uncached: string[] = [];
-    const targetLang = options.targetLang || config.user.targetLang.userConfig || 'zh-CN';
+    const targetLang =
+      options.targetLang || config.user.targetLang.userConfig || "zh-CN";
 
     for (const t of texts) {
       const cached = this._aiGet(`${targetLang}:${t}`);
@@ -132,11 +136,12 @@ class AITranslator {
     options: Options.AITranslateOptions
   ): Promise<string> {
     return this._withRetry(async () => {
-      const targetLang = options.targetLang || config.user.targetLang.userConfig || 'zh-CN';
-      const sourceLang = options.sourceLang || 'ja';
-      const systemPrompt = (options.systemPrompt || DEFAULT_SYSTEM_PROMPT).replace(
-        '{target_lang}', String(targetLang)
-      );
+      const targetLang =
+        options.targetLang || config.user.targetLang.userConfig || "zh-CN";
+      const sourceLang = options.sourceLang || "ja";
+      const systemPrompt = (
+        options.systemPrompt || DEFAULT_SYSTEM_PROMPT
+      ).replace("{target_lang}", String(targetLang));
 
       const controller = new AbortController();
       const timeoutMs = options.timeout || 30000;
@@ -144,18 +149,18 @@ class AITranslator {
 
       try {
         const response = await rawFetch(`${this.baseURL}/chat/completions`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${this.apiKey}`,
           },
           body: JSON.stringify({
             model: this.model,
             messages: [
-              { role: 'system', content: systemPrompt },
+              { role: Role.System, content: systemPrompt },
               {
-                role: 'user',
-                content: `Source language: ${sourceLang}\nTarget language: ${targetLang}\n\nTranslate:\n${text}`
+                role: Role.User,
+                content: `Source language: ${sourceLang}\nTarget language: ${targetLang}\n\nTranslate:\n${text}`,
               },
             ],
             temperature: options.options?.temperature || 0.7,
@@ -165,10 +170,12 @@ class AITranslator {
         });
 
         if (!response.ok) {
-          throw new Error(`AI API 错误 [${response.status}]: ${await response.text()}`);
+          throw new Error(
+            `AI API 错误 [${response.status}]: ${await response.text()}`
+          );
         }
 
-        const data = await response.json() as API.AIResponse;
+        const data = (await response.json()) as API.AIResponse;
         return data.choices?.[0]?.message?.content?.trim() || text;
       } finally {
         clearTimeout(timeout);
@@ -184,48 +191,53 @@ class AITranslator {
       const task = async () => {
         activeRequests++;
         try {
-          const targetLang = options.targetLang || config.user.targetLang.userConfig || 'zh-CN';
-          const sourceLang = options.sourceLang || 'ja';
-          const combinedText = texts.map((t, i) => `[${i}] ${t}`).join('\n');
+          const targetLang =
+            options.targetLang || config.user.targetLang.userConfig || "zh-CN";
+          const sourceLang = options.sourceLang || "ja";
+          const combinedText = texts.map((t, i) => `[${i}] ${t}`).join("\n");
 
           const controller = new AbortController();
           const timeoutMs = options.timeout || 60000;
           const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
           try {
-            const response = await rawFetch(`${this.baseURL}/chat/completions`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${this.apiKey}`,
-              },
-              body: JSON.stringify({
-                model: this.model,
-                messages: [
-                  {
-                    role: 'system',
-                    content: `你是一个游戏本地化翻译引擎。将以下带编号的文本逐条翻译为${targetLang}。规则：仅输出翻译结果，格式为 [编号] 翻译文本，每行一条。保持换行符和占位符不变。`
-                  },
-                  {
-                    role: 'user',
-                    content: `Source: ${sourceLang}\n\n${combinedText}`
-                  },
-                ],
-                temperature: options.options?.temperature || 0.7,
-                max_tokens: options.options?.maxTokens || 2048,
-              }),
-              signal: controller.signal,
-            });
+            const response = await rawFetch(
+              `${this.baseURL}/chat/completions`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${this.apiKey}`,
+                },
+                body: JSON.stringify({
+                  model: this.model,
+                  messages: [
+                    {
+                      role: Role.System,
+                      content: `你是一个游戏本地化翻译引擎。将以下带编号的文本逐条翻译为${targetLang}。规则：仅输出翻译结果，格式为 [编号] 翻译文本，每行一条。保持换行符和占位符不变。`,
+                    },
+                    {
+                      role: Role.User,
+                      content: `Source: ${sourceLang}\n\n${combinedText}`,
+                    },
+                  ],
+                  temperature: options.options?.temperature || 0.7,
+                  max_tokens: options.options?.maxTokens || 2048,
+                }),
+                signal: controller.signal,
+              }
+            );
 
             clearTimeout(timeout);
 
-            if (!response.ok) throw new Error(`AI Batch API 错误 [${response.status}]`);
+            if (!response.ok)
+              throw new Error(`AI Batch API 错误 [${response.status}]`);
 
-            const data = await response.json() as API.AIResponse;
-            const content = data.choices?.[0]?.message?.content || '';
+            const data = (await response.json()) as API.AIResponse;
+            const content = data.choices?.[0]?.message?.content || "";
             const results = new Map<string, string>();
 
-            for (const line of content.split('\n')) {
+            for (const line of content.split("\n")) {
               const m = line.match(/^\[(\d+)\]\s*(.+)$/);
               if (m) {
                 const idx = parseInt(m[1]);
@@ -246,7 +258,7 @@ class AITranslator {
         } catch (e: any) {
           logger.addLog(`AI 批量翻译失败: ${e.message}`, LogLevel.ERROR);
           const fallback = new Map<string, string>();
-          texts.forEach(t => fallback.set(t, t));
+          texts.forEach((t) => fallback.set(t, t));
           resolve(fallback);
         } finally {
           activeRequests--;
@@ -263,7 +275,10 @@ class AITranslator {
     });
   }
 
-  private async _withRetry<T>(fn: () => Promise<T>, maxRetries: number): Promise<T> {
+  private async _withRetry<T>(
+    fn: () => Promise<T>,
+    maxRetries: number
+  ): Promise<T> {
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -272,12 +287,15 @@ class AITranslator {
         lastError = e;
         if (attempt < maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-          logger.addLog(`AI 翻译重试 (${attempt + 1}/${maxRetries})，等待 ${delay}ms`, LogLevel.WARNING);
-          await new Promise(r => setTimeout(r, delay));
+          logger.addLog(
+            `AI 翻译重试 (${attempt + 1}/${maxRetries})，等待 ${delay}ms`,
+            LogLevel.WARNING
+          );
+          await new Promise((r) => setTimeout(r, delay));
         }
       }
     }
-    throw lastError || new Error('AI 翻译失败');
+    throw lastError || new Error("AI 翻译失败");
   }
 }
 

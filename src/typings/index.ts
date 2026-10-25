@@ -24,9 +24,9 @@ export type UserConfig = {
   mootHookEnabled: Options.UserConfigItem<boolean>;
   mootApiUrl: Options.UserConfigItem<string>;
   mootInterceptRequest: Options.UserConfigItem<boolean>;
-  mootProcessResponse: Options.UserConfigItem<boolean>,
+  mootProcessResponse: Options.UserConfigItem<boolean>;
   mootDebug: Options.UserConfigItem<boolean>;
-}
+};
 
 export type AppOptions = {
   maxCacheSize: number;
@@ -39,4 +39,4 @@ export type AppOptions = {
     default: Record<string, string>;
     description: string;
   };
-}
+};

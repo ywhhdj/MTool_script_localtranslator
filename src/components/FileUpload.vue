@@ -10,7 +10,7 @@ import {
   getGameName,
   useHeartbeat
 } from '../utils';
-import Icon from './Icon.vue';
+import Icon from './base/Icon.vue';
 import cache from '../core/cache';
 
 const fileInput = ref<HTMLInputElement | null>(null);

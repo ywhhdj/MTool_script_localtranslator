@@ -1,7 +1,10 @@
-import { ref } from 'vue';
+import { ref } from "vue";
 
-export async function saveJSONFile(jsonData: Record<string, any>, fileName: string) {
-  await download(jsonData, `${fileName}.json`, 'json');
+export async function saveJSONFile(
+  jsonData: Record<string, any>,
+  fileName: string
+) {
+  await download(jsonData, `${fileName}.json`, "json");
 }
 
 // ==================== 文件读取 ====================
@@ -9,16 +12,16 @@ export async function saveJSONFile(jsonData: Record<string, any>, fileName: stri
 export function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = e => resolve((e.target?.result as string) || '');
+    reader.onload = (e) => resolve((e.target?.result as string) || "");
     reader.onerror = () => reject(new Error(`读取文件失败: ${file.name}`));
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsText(file, "UTF-8");
   });
 }
 
 export function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = e => resolve(e.target?.result as ArrayBuffer);
+    reader.onload = (e) => resolve(e.target?.result as ArrayBuffer);
     reader.onerror = () => reject(new Error(`读取文件失败: ${file.name}`));
     reader.readAsArrayBuffer(file);
   });
@@ -27,15 +30,15 @@ export function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
 // ==================== 文件类型判断 ====================
 
 export function getFileType(fileName: string): string {
-  const parts = fileName.split('.');
-  if (parts.length < 2) return '';
+  const parts = fileName.split(".");
+  if (parts.length < 2) return "";
   return parts.pop()!.toLowerCase();
 }
 
 // ==================== 环境检测 ====================
 
 export function checkNodeJS(): boolean {
-  return typeof (module as any) !== 'undefined' && !!(module as any).exports;
+  return typeof (module as any) !== "undefined" && !!(module as any).exports;
 }
 
 export function getNodeJSModule(moduleName: string): any {
@@ -60,7 +63,7 @@ export const rawFetch: typeof fetch = window.fetch.bind(window);
 
 export async function request(
   url: string,
-  method: string = 'GET',
+  method: string = "GET",
   headers?: Record<string, string>
 ): Promise<Response> {
   const response = await rawFetch(url, { method, headers });
@@ -72,15 +75,17 @@ export async function getJSONFileData(
   url: string,
   callback?: (data: Record<string, any>) => any
 ): Promise<any> {
-  const response = await request(url, 'GET', { 'Content-Type': 'application/json' });
+  const response = await request(url, "GET", {
+    "Content-Type": "application/json",
+  });
   const data = await response.json();
-  return typeof callback === 'function' ? callback(data) : data;
+  return typeof callback === "function" ? callback(data) : data;
 }
 
 export async function getCsvFileData(url: string): Promise<string[][]> {
-  const response = await request(url, 'GET', { 'Content-Type': 'text/csv' });
+  const response = await request(url, "GET", { "Content-Type": "text/csv" });
   const text = await response.text();
-  return parseDelimited(text, ',');
+  return parseDelimited(text, ",");
 }
 
 // ==================== 路径处理 ====================
@@ -90,19 +95,19 @@ export async function getPath(fileName: string): Promise<string> {
     try {
       const path = await getGameCWD();
       if (path) return `${path}/${fileName}`;
-    } catch { }
+    } catch {}
   }
   return fileName;
 }
 
 // ==================== 正则解析（统一工具）====================
 export function parseRegex(str: any): any {
-  if (typeof str !== 'string') return str;
+  if (typeof str !== "string") return str;
   const m = str.match(/^\/(.+?)\/([gimsuy]*)$/);
   if (m) {
     try {
-      const flags = m[2] || 'g';
-      const finalFlags = flags.includes('g') ? flags : flags + 'g';
+      const flags = m[2] || "g";
+      const finalFlags = flags.includes("g") ? flags : flags + "g";
       return new RegExp(m[1], finalFlags);
     } catch {
       return str;
@@ -113,7 +118,7 @@ export function parseRegex(str: any): any {
 
 export function isRegexPattern(val: any): boolean {
   if (val instanceof RegExp) return true;
-  if (typeof val !== 'string') return false;
+  if (typeof val !== "string") return false;
   return /^\/.+\/[gimsuy]*$/.test(val);
 }
 
@@ -121,27 +126,34 @@ export function isRegexPattern(val: any): boolean {
 
 // 预编译：这些正则位于翻译热路径上，避免每次调用都新建 RegExp 对象
 const CONTROL_CHARS_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
-const RESOURCE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico|mp3|wav|ogg|mp4|webm|avi|mov|woff2?|ttf|otf|eot)$/i;
-const RESOURCE_DIR_RE = /^(img|image|images|audio|video|fonts?|res|resource|assets?|textures?)\//i;
+const RESOURCE_EXT_RE =
+  /\.(png|jpe?g|gif|webp|svg|bmp|ico|mp3|wav|ogg|mp4|webm|avi|mov|woff2?|ttf|otf|eot)$/i;
+const RESOURCE_DIR_RE =
+  /^(img|image|images|audio|video|fonts?|res|resource|assets?|textures?)\//i;
 const DATA_URI_RE = /^data:(image|audio|video)\//;
 const FTP_URI_RE = /^ftp:\/\//;
 
-export function parseDelimited(csvContent: string, delimiter: string): string[][] {
+export function parseDelimited(
+  csvContent: string,
+  delimiter: string
+): string[][] {
   const rows: string[][] = [];
   const lines = csvContent.split(/\r?\n/);
   // 转义分隔符，避免 '|' 等正则元字符破坏匹配
-  const delim = delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const delim = delimiter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const splitRe = new RegExp(`${delim}(?=(?:(?:[^"]*"){2})*[^"]*$)`);
   for (const line of lines) {
     if (!line.trim()) continue;
     const values = line.split(splitRe);
-    rows.push(values.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"').trim()));
+    rows.push(
+      values.map((v) => v.replace(/^"|"$/g, "").replace(/""/g, '"').trim())
+    );
   }
   return rows;
 }
 
 export function parseTSV(content: string): string[][] {
-  return parseDelimited(content, '\t');
+  return parseDelimited(content, "\t");
 }
 
 // ==================== UI 心跳 ====================
@@ -152,27 +164,36 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
 export function useHeartbeat(intervalMs: number = 1000) {
   if (!heartbeatTimer) {
-    heartbeatTimer = setInterval(() => { heartbeat.value++; }, intervalMs);
+    heartbeatTimer = setInterval(() => {
+      heartbeat.value++;
+    }, intervalMs);
   }
   return heartbeat;
 }
 
 export function getGameName(): string {
   // 页面 title 常含 \/:*?"<>| 等非法文件名字符，直接拼进导出文件名会失败
-  return (window.document.title || 'game').replace(/[\\/:*?"<>|\r\n\t]/g, '_').slice(0, 60);
+  return (window.document.title || "game")
+    .replace(/[\\/:*?"<>|\r\n\t]/g, "_")
+    .slice(0, 60);
 }
 
 // ==================== XLSX 解析 ====================
 
 export async function parseXLSX(file: File): Promise<string[][]> {
-  const XLSX = window.XLSX || getNodeJSModule('xlsx');
+  const XLSX = window.XLSX || getNodeJSModule("xlsx");
   if (XLSX) {
     const buf = await readFileAsArrayBuffer(file);
-    const wb = XLSX.read(buf, { type: 'array' });
+    const wb = XLSX.read(buf, { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as string[][];
+    return XLSX.utils.sheet_to_json(ws, {
+      header: 1,
+      defval: "",
+    }) as string[][];
   }
-  throw new Error('未检测到 SheetJS 库，请引入 xlsx.js 后重试，或改用 CSV/JSON 格式');
+  throw new Error(
+    "未检测到 SheetJS 库，请引入 xlsx.js 后重试，或改用 CSV/JSON 格式"
+  );
 }
 
 // ==================== 翻译数据解析（统一入口）====================
@@ -195,16 +216,16 @@ export function normalizeTranslationData(
   data: any,
   isDefault: boolean = false
 ): TranslateDataNormalized {
-  if (!data) throw new Error('未提供有效的翻译数据');
+  if (!data) throw new Error("未提供有效的翻译数据");
 
   if (isDefault) {
     const rules: TranslateDataNormalized = [];
     for (const [k, v] of Object.entries(data)) {
-      if (typeof v !== 'string') continue;
-      if (k.startsWith('/') && k.endsWith('/')) {
+      if (typeof v !== "string") continue;
+      if (k.startsWith("/") && k.endsWith("/")) {
         const inner = k.slice(1, -1); // 去掉首尾斜杠
         try {
-          const parsed = new RegExp(inner, 'g');
+          const parsed = new RegExp(inner, "g");
           rules.push({
             source: parsed,
             target: v,
@@ -223,7 +244,6 @@ export function normalizeTranslationData(
           target: v,
         });
       }
-
     }
     return rules;
   }
@@ -239,7 +259,7 @@ export function normalizeTranslationData(
   }
 
   // 对象格式 { "原文": "译文" }
-  if (typeof data === 'object' && data !== null) {
+  if (typeof data === "object" && data !== null) {
     return parseJSON(data);
   }
   throw new Error(`无法识别的文件格式`);
@@ -248,18 +268,18 @@ export function normalizeTranslationData(
 export function parseJSON(data: any): TranslateDataNormalized {
   const rules: Data.TranslationRule[] = [];
   for (const [k, v] of Object.entries(data)) {
-    if (typeof v === 'string' && k && v) {
+    if (typeof v === "string" && k && v) {
       const parsed = parseRegex(k);
       if (parsed instanceof RegExp) {
         rules.push({
           source: parsed,
           target: v,
-          regex: parsed
+          regex: parsed,
         });
       } else {
         rules.push({
           source: k,
-          target: v
+          target: v,
         });
       }
     }
@@ -290,7 +310,7 @@ export function parseArray(data: any[]): TranslateDataNormalized {
 }
 
 export function isCollDataFormat(data: any): boolean {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
   // CollData.json: { "25045": { id, name, data: [[...], ...] } }
   const firstKey = Object.keys(data)[0];
   if (!firstKey) return false;
@@ -298,31 +318,35 @@ export function isCollDataFormat(data: any): boolean {
   return firstVal && Array.isArray(firstVal.data) && firstVal.data.length > 0;
 }
 
-
-type CollData = Record<string, {
-  id: number,
-  data: string | string[][],
-  name: string,
-  type: "script" | "trs",
-  desc: string,
-  lang: number,
-  slang: number,
-  transengine: string,
-  gameengine: string,
-  public: number,
-  createdate: number,
-  updatedate: number,
-  ownername: string,
-  ownerid: number,
-  downloadcnt: number,
-  permission: {
-    [key: string]: {
-      permission: string[]
-    }
-  },
-  status: string | null,
-  [key: string]: any
-}>
+type CollData = Record<
+  string,
+  {
+    id: number;
+    data: string | string[][];
+    name: string;
+    type: "script" | "trs";
+    desc: string;
+    lang: number;
+    slang: number;
+    transengine: string;
+    gameengine: string;
+    public: number;
+    createdate: number;
+    updatedate: number;
+    ownername: string;
+    ownerid: number;
+    downloadcnt: number;
+    permission: Record<
+      string,
+      {
+        permission: string[];
+        [key: string]: any;
+      }
+    > | null;
+    status: string | null;
+    [key: string]: any;
+  }
+>;
 
 export function parseCollData(data: CollData): TranslateDataNormalized {
   const rules: Data.TranslationRule[] = [];
@@ -335,7 +359,12 @@ export function parseCollData(data: CollData): TranslateDataNormalized {
       break;
     }
   }
-  if (first && typeof first === 'object' && 'data' in first && Array.isArray(first.data)) {
+  if (
+    first &&
+    typeof first === "object" &&
+    "data" in first &&
+    Array.isArray(first.data)
+  ) {
     for (const key of keys) {
       const item = data[key];
       if (item.type !== "trs") continue;
@@ -346,25 +375,29 @@ export function parseCollData(data: CollData): TranslateDataNormalized {
         if (row.length >= 3 && row[0] && row[2]) {
           const src = String(row[0]).trim();
           const tgt = String(row[2]).trim();
-          if (src && tgt && !src.startsWith('【') && !src.startsWith('[')) {
+          if (src && tgt && !src.startsWith("【") && !src.startsWith("[")) {
             // 检测是否为正则
-            if (typeof row[1] === 'string' && row[1].startsWith('/') && row[1].endsWith('/')) {
+            if (
+              typeof row[1] === "string" &&
+              row[1].startsWith("/") &&
+              row[1].endsWith("/")
+            ) {
               try {
                 const inner = row[1].slice(1, -1);
                 rules.push({
-                  source: new RegExp(inner, 'g'),
-                  target: tgt
+                  source: new RegExp(inner, "g"),
+                  target: tgt,
                 });
               } catch {
                 rules.push({
                   source: src,
-                  target: tgt
+                  target: tgt,
                 });
               }
             } else {
               rules.push({
                 source: src,
-                target: tgt
+                target: tgt,
               });
             }
           }
@@ -377,7 +410,10 @@ export function parseCollData(data: CollData): TranslateDataNormalized {
 
 // ==================== 防抖 / 节流 ====================
 
-export function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
+export function debounce<T extends (...args: any[]) => void>(
+  fn: T,
+  delay: number
+): T {
   let timer: ReturnType<typeof setTimeout> | null = null;
   return ((...args: any[]) => {
     if (timer) clearTimeout(timer);
@@ -388,7 +424,10 @@ export function debounce<T extends (...args: any[]) => void>(fn: T, delay: numbe
   }) as T;
 }
 
-export function throttle<T extends (...args: any[]) => void>(fn: T, interval: number): T {
+export function throttle<T extends (...args: any[]) => void>(
+  fn: T,
+  interval: number
+): T {
   let last = 0;
   return ((...args: any[]) => {
     const now = Date.now();
@@ -410,12 +449,14 @@ export function safeJSONParse<T = any>(str: string): T | null {
 }
 
 function pad(n: number): string {
-  return String(n).padStart(2, '0');
+  return String(n).padStart(2, "0");
 }
 
 export function timestampFileName(prefix: string, ext: string): string {
   const d = new Date();
-  const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`;
+  const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+    d.getDate()
+  )}_${pad(d.getHours())}-${pad(d.getMinutes())}`;
   return `${prefix}_${ts}.${ext}`;
 }
 
@@ -423,15 +464,19 @@ export function timestampFileName(prefix: string, ext: string): string {
  * Bug 1 修复：stripControlChars 增加类型检查
  */
 export function stripControlChars(str: any): string {
-  if (str === null || str === undefined) return '';
-  if (typeof str !== 'string') {
-    try { str = String(str); } catch { return ''; }
+  if (str === null || str === undefined) return "";
+  if (typeof str !== "string") {
+    try {
+      str = String(str);
+    } catch {
+      return "";
+    }
   }
-  return str.replace(CONTROL_CHARS_RE, '');
+  return str.replace(CONTROL_CHARS_RE, "");
 }
 
 export function isResourcePath(text: any): boolean {
-  if (typeof text !== 'string') return false;
+  if (typeof text !== "string") return false;
   if (text.length === 0) return false;
   if (RESOURCE_EXT_RE.test(text)) return true;
   if (RESOURCE_DIR_RE.test(text)) return true;
@@ -441,7 +486,7 @@ export function isResourcePath(text: any): boolean {
 }
 
 export function isValidText(text: any): text is string {
-  if (typeof text !== 'string') return false;
+  if (typeof text !== "string") return false;
   if (text.length === 0) return false;
   if (text.length > 500) return false;
   if (isResourcePath(text)) return false;
@@ -456,39 +501,47 @@ export function download(
 ): Promise<boolean> {
   return new Promise((resolve, reject) => {
     try {
-      let mimeType = ""
-      let data_ = null
+      let mimeType = "";
+      let data_ = null;
       switch (type) {
         case "txt":
-          mimeType = "text/plain"
+          mimeType = "text/plain";
           break;
         case "csv":
-          mimeType = "text/csv;charset=utf-8"
-          data_ = "\uFEFF" + data
-            .map((row: (string | number)[]) =>
-              row
-                .map(cell => {
-                  const str = String(cell ?? '');
-                  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-                })
-                .join(',')
-            )
-            .join('\n');
+          mimeType = "text/csv;charset=utf-8";
+          data_ =
+            "\uFEFF" +
+            data
+              .map((row: (string | number)[]) =>
+                row
+                  .map((cell) => {
+                    const str = String(cell ?? "");
+                    return /[",\n]/.test(str)
+                      ? `"${str.replace(/"/g, '""')}"`
+                      : str;
+                  })
+                  .join(",")
+              )
+              .join("\n");
           break;
         case "tsv":
-          mimeType = "text/tab-separated-values"
+          mimeType = "text/tab-separated-values";
           data_ = data
-            .map((row: (string | number)[]) => row.map(cell => String(cell ?? '').replace(/\t/g, ' ')).join('\t'))
-            .join('\n');
+            .map((row: (string | number)[]) =>
+              row
+                .map((cell) => String(cell ?? "").replace(/\t/g, " "))
+                .join("\t")
+            )
+            .join("\n");
           break;
         default:
-          mimeType = "application/json"
-          data_ = JSON.stringify(data, null, 2)
+          mimeType = "application/json";
+          data_ = JSON.stringify(data, null, 2);
           break;
       }
       const blob = new Blob([data_], { type: mimeType });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = fileName;
       document.body.appendChild(a);
@@ -502,55 +555,56 @@ export function download(
   });
 }
 
-
 export function xhrRequest(
   url: string,
   method: "GET" | "POST" = "GET",
   headers: Record<string, string> = {},
   data?: any
 ) {
-  return new Promise((
-    resolve: (data: any) => void,
-    reject: (err: {
-      status?: number;
-      statusText?: string;
-      error: string;
-    }) => void
-  ) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open(method, url);
-    for (const key in headers) {
-      xhr.setRequestHeader(key, headers[key]);
-    }
-    xhr.responseType = 'json';
-    xhr.timeout = 10000;
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(xhr.response);
-      } else {
+  return new Promise(
+    (
+      resolve: (data: any) => void,
+      reject: (err: {
+        status?: number;
+        statusText?: string;
+        error: string;
+      }) => void
+    ) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(method, url);
+      for (const key in headers) {
+        xhr.setRequestHeader(key, headers[key]);
+      }
+      xhr.responseType = "json";
+      xhr.timeout = 10000;
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr.response);
+        } else {
+          reject({
+            status: xhr.status,
+            statusText: xhr.statusText,
+            error: xhr.response || xhr.statusText,
+          });
+        }
+      };
+      xhr.onerror = () => {
+        reject({ status: xhr.status, error: "网络错误（无法连接服务器）" });
+      };
+
+      xhr.ontimeout = () => {
         reject({
-          status: xhr.status,
-          statusText: xhr.statusText,
-          error: xhr.response || xhr.statusText
+          status: 408,
+          error: "请求超时",
+        });
+      };
+      try {
+        xhr.send(JSON.stringify(data));
+      } catch (e: any) {
+        reject({
+          error: "序列化载荷失败：" + e.message,
         });
       }
-    };
-    xhr.onerror = () => {
-      reject({ status: xhr.status, error: '网络错误（无法连接服务器）' });
-    };
-
-    xhr.ontimeout = () => {
-      reject({
-        status: 408,
-        error: '请求超时'
-      });
-    };
-    try {
-      xhr.send(JSON.stringify(data));
-    } catch (e: any) {
-      reject({
-        error: '序列化载荷失败：' + e.message
-      });
     }
-  });
+  );
 }

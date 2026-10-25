@@ -41,14 +41,14 @@ export class TinyBloom {
   }
 
   add(str: string): void {
-    if (!str || typeof str !== 'string') return;
+    if (!str || typeof str !== "string") return;
     TinyBloom._hashPair(str);
     const h1 = TinyBloom._h1;
     const h2 = TinyBloom._h2;
     for (let i = 0; i < 3; i++) {
       const idx = ((h1 + i * h2) >>> 0) % this.size;
       const bitPos = ((h1 + i * h2 * 7) >>> 0) & 31;
-      this.bits[idx] |= (1 << bitPos);
+      this.bits[idx] |= 1 << bitPos;
     }
     this._count++;
   }
@@ -64,7 +64,7 @@ export class TinyBloom {
    *          true  = 可能存在（需进一步精确查询）
    */
   mightContain(str: string): boolean {
-    if (!str || typeof str !== 'string') return false;
+    if (!str || typeof str !== "string") return false;
     TinyBloom._hashPair(str);
     const h1 = TinyBloom._h1;
     const h2 = TinyBloom._h2;
@@ -97,7 +97,7 @@ export class TinyBloom {
     let h2 = 5381;
     for (let i = 0; i < s.length; i++) {
       const c = s.charCodeAt(i);
-      h1 = Math.imul(h1 ^ c, 16777619) >>> 0;   // Math.imul 确保 32-bit 溢出乘法
+      h1 = Math.imul(h1 ^ c, 16777619) >>> 0; // Math.imul 确保 32-bit 溢出乘法
       h2 = ((h2 << 5) + h2 + c) >>> 0;
     }
     TinyBloom._h1 = h1 >>> 0;

@@ -1,9 +1,14 @@
-import logger, { LogLevel } from './logger';
-import { WebSocketHook } from './hooks/websocket';
-import translator from './translator';
-import aiFixRules, { type AIFixRule } from './aiFixRules';
-import config from '../config';
-import { isRegexPattern, parseRegex, safeJSONParse, xhrRequest } from '../utils';
+import logger, { LogLevel } from "./logger";
+import { WebSocketHook } from "./hooks/websocket";
+import translator from "./translator";
+import aiFixRules, { type AIFixRule } from "./aiFixRules";
+import config from "../config";
+import {
+  isRegexPattern,
+  parseRegex,
+  safeJSONParse,
+  xhrRequest,
+} from "../utils";
 
 export interface MootRule {
   aaa: string | RegExp;
@@ -21,7 +26,7 @@ type MootStats = {
   responsesFixed: number;
   responsesLearned: number;
   cacheHitRate: string;
-}
+};
 
 class MootHookManager {
   private wsHook: WebSocketHook | null = null;
@@ -34,10 +39,10 @@ class MootHookManager {
     responsesSeen: 0,
     responsesFixed: 0,
     responsesLearned: 0,
-    cacheHitRate: '0%',
+    cacheHitRate: "0%",
   };
   private enabled = false;
-  private apiUrl: string = 'http://127.0.0.1:64002/wslikecmd';
+  private apiUrl: string = "http://127.0.0.1:64002/wslikecmd";
   private nextId = 0;
 
   // ==================== 安装/卸载 ====================
@@ -48,7 +53,11 @@ class MootHookManager {
 
     // Step 1: aiFixRules 后修正
     let fixed = aiResult;
-    try { fixed = aiFixRules.fix(original, aiResult); } catch { fixed = aiResult; }
+    try {
+      fixed = aiFixRules.fix(original, aiResult);
+    } catch {
+      fixed = aiResult;
+    }
 
     // Step 2: Moot 自定义规则
     fixed = this._applyMootRules(original, fixed);
@@ -57,31 +66,41 @@ class MootHookManager {
     if (fixed && fixed !== original) {
       try {
         translator.fixAITranslation(original, fixed);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       this.stats.responsesLearned++;
     }
 
     if (fixed !== aiResult) {
       this.stats.responsesFixed++;
       if (config.debug) {
-        console.log(`[MToolTranslatorPlugin][Moot] ✏️ 响应修复: "${aiResult.slice(0, 20)}..." → "${fixed.slice(0, 30)}..."`);
+        console.log(
+          `[MToolTranslatorPlugin][Moot] ✏️ 响应修复: "${aiResult.slice(
+            0,
+            20
+          )}..." → "${fixed.slice(0, 30)}..."`
+        );
       }
     }
     return fixed;
   }
 
-  install(options: {
-    apiUrl?: string;
-    interceptRequest?: boolean;
-    processResponse?: boolean;
-    debug?: boolean;
-  } = {}): boolean {
+  install(
+    options: {
+      apiUrl?: string;
+      interceptRequest?: boolean;
+      processResponse?: boolean;
+      debug?: boolean;
+    } = {}
+  ): boolean {
     if (this.enabled) {
-      logger.addLog('[Moot] 已安装，跳过', LogLevel.WARNING);
+      logger.addLog("[Moot] 已安装，跳过", LogLevel.WARNING);
       return false;
     }
 
-    this.apiUrl = options.apiUrl || config.user.mootApiUrl?.userConfig || this.apiUrl;
+    this.apiUrl =
+      options.apiUrl || config.user.mootApiUrl?.userConfig || this.apiUrl;
     if (options.debug !== undefined) config.debug = options.debug;
 
     const wsOptions: Options.WebSocketHookOptions = {
@@ -97,14 +116,22 @@ class MootHookManager {
           if (cached && cached !== text) {
             this.stats.requestsIntercepted++;
             if (config.debug)
-              console.log(`[MToolTranslatorPlugin][Moot] 💾 缓存命中: "${text.slice(0, 20)}..." → "${cached.slice(0, 30)}..."`);
+              console.log(
+                `[MToolTranslatorPlugin][Moot] 💾 缓存命中: "${text.slice(
+                  0,
+                  20
+                )}..." → "${cached.slice(0, 30)}..."`
+              );
             return cached;
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
         return null; // 不拦截，让 AI 处理
       },
       // 必须绑定 this，否则回调内访问 this.stats 会抛 TypeError
-      fixResponseFn: (original: string, aiResult: string) => this.aifixResponse(original, aiResult),
+      fixResponseFn: (original: string, aiResult: string) =>
+        this.aifixResponse(original, aiResult),
     };
 
     this.wsHook = new WebSocketHook(wsOptions);
@@ -114,7 +141,10 @@ class MootHookManager {
       this.enabled = true;
       this.stats.enabled = true;
       this.stats.installed = true;
-      logger.addLog(`[Moot] Hook 已安装 (API: ${this.apiUrl})`, LogLevel.SUCCESS);
+      logger.addLog(
+        `[Moot] Hook 已安装 (API: ${this.apiUrl})`,
+        LogLevel.SUCCESS
+      );
       return true;
     }
 
@@ -130,9 +160,9 @@ class MootHookManager {
     this.stats.enabled = false;
     this.stats.installed = false;
     if (config.debug) {
-      console.log('[MToolTranslatorPlugin][Moot] ↩️ Moot Hook 已卸载');
+      console.log("[MToolTranslatorPlugin][Moot] ↩️ Moot Hook 已卸载");
     }
-    logger.addLog('[Moot] Hook 已卸载', LogLevel.INFO);
+    logger.addLog("[Moot] Hook 已卸载", LogLevel.INFO);
   }
 
   get isInstalled(): boolean {
@@ -158,7 +188,10 @@ class MootHookManager {
       const ok = this.install(options);
       if (ok || left <= 0) {
         if (!ok) {
-          logger.addLog(`[Moot] 自动安装失败，已重试 ${retries} 次`, LogLevel.WARNING);
+          logger.addLog(
+            `[Moot] 自动安装失败，已重试 ${retries} 次`,
+            LogLevel.WARNING
+          );
         }
         return;
       }
@@ -170,12 +203,14 @@ class MootHookManager {
   /**
    * 更新配置：运行时改动需要重装 Hook 才生效
    */
-  updateConfig(options: {
-    apiUrl?: string;
-    interceptRequest?: boolean;
-    processResponse?: boolean;
-    debug?: boolean;
-  } = {}): void {
+  updateConfig(
+    options: {
+      apiUrl?: string;
+      interceptRequest?: boolean;
+      processResponse?: boolean;
+      debug?: boolean;
+    } = {}
+  ): void {
     if (options.debug !== undefined) config.debug = options.debug;
     if (!this.enabled) return;
     this.uninstall();
@@ -184,13 +219,20 @@ class MootHookManager {
 
   // ==================== 规则管理 ====================
 
-  addRule(aaa: string | RegExp, bbb: string | RegExp | null, ccc: string): void {
+  addRule(
+    aaa: string | RegExp,
+    bbb: string | RegExp | null,
+    ccc: string
+  ): void {
     // "/\d+日目/" 这类字符串也必须转成真正的 RegExp，
     // 否则 aaa 会退化成全等比较，规则永远匹配不上
-    const parsedAaa = typeof aaa === 'string' ? parseRegex(aaa) : aaa;
-    const parsedBbb = bbb === null || bbb === undefined
-      ? null
-      : (typeof bbb === 'string' ? parseRegex(bbb) : bbb);
+    const parsedAaa = typeof aaa === "string" ? parseRegex(aaa) : aaa;
+    const parsedBbb =
+      bbb === null || bbb === undefined
+        ? null
+        : typeof bbb === "string"
+        ? parseRegex(bbb)
+        : bbb;
     const rule: MootRule = {
       aaa: parsedAaa,
       bbb: parsedBbb,
@@ -199,8 +241,16 @@ class MootHookManager {
     };
     this.rules.push(rule);
     if (config.debug)
-      console.log(`[MToolTranslatorPlugin][Moot] ➕ 规则: "${String(aaa).slice(0, 20)}" → "${ccc.slice(0, 30)}"`);
-    logger.addLog(`[Moot] 规则已添加: ${String(aaa).slice(0, 20)} → ${ccc.slice(0, 20)}`, LogLevel.SUCCESS);
+      console.log(
+        `[MToolTranslatorPlugin][Moot] ➕ 规则: "${String(aaa).slice(
+          0,
+          20
+        )}" → "${ccc.slice(0, 30)}"`
+      );
+    logger.addLog(
+      `[Moot] 规则已添加: ${String(aaa).slice(0, 20)} → ${ccc.slice(0, 20)}`,
+      LogLevel.SUCCESS
+    );
   }
 
   clearRules(): void {
@@ -224,30 +274,32 @@ class MootHookManager {
 
   async loadRulesFromFile(file: File): Promise<number> {
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
       let rules: MootRule[] = [];
 
-      if (ext === 'json') {
+      if (ext === "json") {
         const text = await file.text();
         const data = safeJSONParse(text);
         rules = this._parseRulesFromData(data);
-      } else if (ext === 'csv' || ext === 'tsv') {
+      } else if (ext === "csv" || ext === "tsv") {
         const text = await file.text();
-        const delimiter = ext === 'csv' ? ',' : '\t';
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        const delimiter = ext === "csv" ? "," : "\t";
+        const lines = text.split(/\r?\n/).filter((l) => l.trim());
         for (const line of lines) {
-          const cols = line.split(delimiter).map(c => c.trim().replace(/^"|"$/g, ''));
+          const cols = line
+            .split(delimiter)
+            .map((c) => c.trim().replace(/^"|"$/g, ""));
           if (cols.length >= 3 && cols[0] && cols[2]) {
             rules.push({ aaa: cols[0], bbb: cols[1] || null, ccc: cols[2] });
           }
         }
-      } else if (ext === 'xlsx' || ext === 'xls') {
+      } else if (ext === "xlsx" || ext === "xls") {
         const XLSX = (window as any).XLSX;
-        if (!XLSX) throw new Error('XLSX 需要引入 SheetJS 库');
+        if (!XLSX) throw new Error("XLSX 需要引入 SheetJS 库");
         const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: 'array' });
+        const wb = XLSX.read(buf, { type: "array" });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
         for (const row of rows) {
           if (Array.isArray(row) && row.length >= 3 && row[0] && row[2]) {
             rules.push({ aaa: row[0], bbb: row[1] || null, ccc: row[2] });
@@ -258,16 +310,19 @@ class MootHookManager {
       }
 
       // 同时写入 aiFixRules（三列规则通用）
-      const aiRules: AIFixRule[] = rules.map(r => ({
+      const aiRules: AIFixRule[] = rules.map((r) => ({
         aaa: r.aaa,
-        bbb: r.bbb || '',
+        bbb: r.bbb || "",
         ccc: r.ccc,
         _isRegex: r._isRegex,
       }));
       aiFixRules.addRules(aiRules);
 
       this.rules.push(...rules);
-      logger.addLog(`[Moot] 规则文件加载成功: ${file.name}（${rules.length} 条）`, LogLevel.SUCCESS);
+      logger.addLog(
+        `[Moot] 规则文件加载成功: ${file.name}（${rules.length} 条）`,
+        LogLevel.SUCCESS
+      );
       return rules.length;
     } catch (e: any) {
       logger.addLog(`[Moot] 规则文件加载失败: ${e.message}`, LogLevel.ERROR);
@@ -278,8 +333,8 @@ class MootHookManager {
   // ==================== 测试翻译 ====================
 
   testTranslate(text: string): Promise<string> {
-    if (!this.enabled) throw new Error('Moot Hook 未启用');
-    if (text.trim() === '') throw new Error('测试文本不能为空');
+    if (!this.enabled) throw new Error("Moot Hook 未启用");
+    if (text.trim() === "") throw new Error("测试文本不能为空");
     return new Promise((resolve, reject) => {
       // 先查本地
       const local = translator.interceptText(text);
@@ -291,30 +346,36 @@ class MootHookManager {
         id: this.nextId++,
         type: 1,
         target: 1,
-        cmd: 'trs',
+        cmd: "trs",
         args: [text],
-      } as API.MootRequest
-      xhrRequest(this.apiUrl, 'POST', {
-        'Content-Type': 'text/plain;charset=UTF-8',
-      }, payload
-      ).then((response: API.MootResponse) => {
-        if (response.type !== 1) throw new Error('Moot Hook 响应类型错误');
-        if (response.error) throw new Error(response.ret || '未知Moot Hook 错误');
-        const ret = response.ret || '';
-        if (ret === '') throw new Error('Moot Hook 响应内容为空');
-        const fixed = this._applyMootRules(text, ret);
-        if (fixed !== text) {
-          translator.addCache(text, fixed);
-        }
-        // 返回经 aaa/bbb/ccc 修正后的结果，否则测试面板看到的和实际进游戏的不一致
-        resolve(`[AI回复] ${fixed}`);
-      }).catch((err) => {
-        logger.addLog(`[Moot] 测试翻译失败: ${err.message}`, LogLevel.ERROR);
-        reject('[无回复] 后台可能未启动 ' + err.message);
-      });
+      } as API.MootRequest;
+      xhrRequest(
+        this.apiUrl,
+        "POST",
+        {
+          "Content-Type": "text/plain;charset=UTF-8",
+        },
+        payload
+      )
+        .then((response: API.MootResponse) => {
+          if (response.type !== 1) throw new Error("Moot Hook 响应类型错误");
+          if (response.error)
+            throw new Error(response.ret || "未知Moot Hook 错误");
+          const ret = response.ret || "";
+          if (ret === "") throw new Error("Moot Hook 响应内容为空");
+          const fixed = this._applyMootRules(text, ret);
+          if (fixed !== text) {
+            translator.addCache(text, fixed);
+          }
+          // 返回经 aaa/bbb/ccc 修正后的结果，否则测试面板看到的和实际进游戏的不一致
+          resolve(`[AI回复] ${fixed}`);
+        })
+        .catch((err) => {
+          logger.addLog(`[Moot] 测试翻译失败: ${err.message}`, LogLevel.ERROR);
+          reject("[无回复] 后台可能未启动 " + err.message);
+        });
     });
   }
-
 
   // ==================== 统计 ====================
 
@@ -335,9 +396,9 @@ class MootHookManager {
       responsesSeen: 0,
       responsesFixed: 0,
       responsesLearned: 0,
-      cacheHitRate: '0%',
+      cacheHitRate: "0%",
     };
-    console.log('[MToolTranslatorPlugin][Moot] 📊 统计已重置');
+    console.log("[MToolTranslatorPlugin][Moot] 📊 统计已重置");
   }
 
   // ==================== 内部方法 ====================
@@ -347,8 +408,13 @@ class MootHookManager {
     for (const rule of this.rules) {
       try {
         if (rule._isRegex) {
-          const aaa = rule.aaa instanceof RegExp ? rule.aaa : new RegExp(rule.aaa);
-          const bbb = rule.bbb ? (rule.bbb instanceof RegExp ? rule.bbb : new RegExp(rule.bbb)) : null;
+          const aaa =
+            rule.aaa instanceof RegExp ? rule.aaa : new RegExp(rule.aaa);
+          const bbb = rule.bbb
+            ? rule.bbb instanceof RegExp
+              ? rule.bbb
+              : new RegExp(rule.bbb)
+            : null;
 
           // 带 g 标志的正则会残留 lastIndex，导致同一条规则隔次失配
           aaa.lastIndex = 0;
@@ -370,7 +436,9 @@ class MootHookManager {
             }
           }
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
     return result;
   }
@@ -379,13 +447,14 @@ class MootHookManager {
     const rules: MootRule[] = [];
 
     // CollData.json 格式
-    if (data && typeof data === 'object' && !Array.isArray(data)) {
+    if (data && typeof data === "object" && !Array.isArray(data)) {
       for (const key of Object.keys(data)) {
         const item = data[key];
         if (item?.data && Array.isArray(item.data)) {
           for (const row of item.data) {
             if (Array.isArray(row) && row.length >= 3 && row[0] && row[2]) {
-              const isRegex = typeof row[1] === 'string' && row[1].startsWith('/');
+              const isRegex =
+                typeof row[1] === "string" && row[1].startsWith("/");
               rules.push({
                 aaa: row[0],
                 bbb: row[1] || null,
@@ -403,12 +472,12 @@ class MootHookManager {
       for (const item of data) {
         if (Array.isArray(item) && item.length >= 3 && item[0] && item[2]) {
           rules.push({ aaa: item[0], bbb: item[1] || null, ccc: item[2] });
-        } else if (item && typeof item === 'object') {
+        } else if (item && typeof item === "object") {
           const aaa = item.aaa || item.source || item.original;
           const bbb = item.bbb || item.pattern || item.match || null;
           const ccc = item.ccc || item.target || item.replacement;
           if (aaa && ccc) {
-            rules.push({ aaa, bbb, ccc, _isRegex: typeof aaa !== 'string' });
+            rules.push({ aaa, bbb, ccc, _isRegex: typeof aaa !== "string" });
           }
         }
       }
@@ -419,7 +488,7 @@ class MootHookManager {
 
   private _extractHost(url: string): string {
     try {
-      if (url.startsWith('ws://') || url.startsWith('wss://')) {
+      if (url.startsWith("ws://") || url.startsWith("wss://")) {
         return new URL(url).host;
       }
       // 形如 http://127.0.0.1:64002/wslikecmd

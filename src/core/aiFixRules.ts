@@ -13,9 +13,17 @@
  *   ccc: 替换结果
  */
 
-import config from '../config';
-import { getFileType, getGameName, parseDelimited, parseRegex, parseXLSX, safeJSONParse, timestampFileName } from '../utils';
-import logger, { LogLevel } from './logger';
+import config from "../config";
+import {
+  getFileType,
+  getGameName,
+  parseDelimited,
+  parseRegex,
+  parseXLSX,
+  safeJSONParse,
+  timestampFileName,
+} from "../utils";
+import logger, { LogLevel } from "./logger";
 
 // ==================== 类型定义 ====================
 
@@ -45,10 +53,10 @@ export function parseRuleItem(item: any): AIFixRule | null {
   }
 
   // 对象格式
-  if (typeof item === 'object') {
-    const aaa = item.aaa ?? item.source ?? item.original ?? '';
-    const bbb = item.bbb ?? item.pattern ?? item.match ?? '';
-    const ccc = item.ccc ?? item.target ?? item.replacement ?? item.fix ?? '';
+  if (typeof item === "object") {
+    const aaa = item.aaa ?? item.source ?? item.original ?? "";
+    const bbb = item.bbb ?? item.pattern ?? item.match ?? "";
+    const ccc = item.ccc ?? item.target ?? item.replacement ?? item.fix ?? "";
     if (!aaa || !ccc) return null;
     return makeRule(aaa, bbb, ccc);
   }
@@ -67,7 +75,7 @@ export function extractRules(data: any): AIFixRule[] {
     return rules;
   }
 
-  if (typeof data === 'object' && data !== null) {
+  if (typeof data === "object" && data !== null) {
     for (const [key, value] of Object.entries(data)) {
       if (Array.isArray(value) && value.length >= 2) {
         if (value.length >= 3) {
@@ -75,12 +83,12 @@ export function extractRules(data: any): AIFixRule[] {
         } else {
           rules.push(makeRule(key, value[0], value[1]));
         }
-      } else if (typeof value === 'string') {
-        rules.push(makeRule(key, '', value));
-      } else if (typeof value === 'object' && value !== null) {
+      } else if (typeof value === "string") {
+        rules.push(makeRule(key, "", value));
+      } else if (typeof value === "object" && value !== null) {
         const rule = parseRuleItem({
           ...value,
-          aaa: (value as any).aaa || key
+          aaa: (value as any).aaa || key,
         });
         if (rule) rules.push(rule);
       }
@@ -97,7 +105,7 @@ export function makeRule(aaaRaw: any, bbbRaw: any, cccRaw: any): AIFixRule {
   return {
     aaa,
     bbb,
-    ccc: String(cccRaw || ''),
+    ccc: String(cccRaw || ""),
     _isRegex: isRegex,
   };
 }
@@ -120,14 +128,14 @@ function normalizeRule(rule: AIFixRule): AIFixRule {
 }
 
 function parseValue(val: any): string | RegExp {
-  if (val === undefined || val === null) return '';
+  if (val === undefined || val === null) return "";
   if (val instanceof RegExp) {
-    if (!val.flags.includes('g')) {
-      return new RegExp(val.source, val.flags + 'g');
+    if (!val.flags.includes("g")) {
+      return new RegExp(val.source, val.flags + "g");
     }
     return val;
   }
-  if (typeof val !== 'string') return String(val);
+  if (typeof val !== "string") return String(val);
   const parsed = parseRegex(val);
   return parsed;
 }
@@ -141,14 +149,19 @@ class AIFixRulesEngine {
     exactRules: 0,
     regexRules: 0,
     hits: 0,
-    lastFix: '',
+    lastFix: "",
   };
 
   addRule(rule: AIFixRule): void {
     this.rules.push(normalizeRule(rule));
     this._recalcStats();
     if (config.debug) {
-      console.log(`[MToolTranslatorPlugin][AIFix] ➕ 添加规则: "${String(rule.aaa).slice(0, 20)}" → "${rule.ccc.slice(0, 30)}"`);
+      console.log(
+        `[MToolTranslatorPlugin][AIFix] ➕ 添加规则: "${String(rule.aaa).slice(
+          0,
+          20
+        )}" → "${rule.ccc.slice(0, 30)}"`
+      );
     }
   }
 
@@ -156,7 +169,9 @@ class AIFixRulesEngine {
     for (const r of rules) this.rules.push(normalizeRule(r));
     this._recalcStats();
     if (config.debug) {
-      console.log(`[MToolTranslatorPlugin][AIFix] ➕ 批量添加 ${rules.length} 条规则`);
+      console.log(
+        `[MToolTranslatorPlugin][AIFix] ➕ 批量添加 ${rules.length} 条规则`
+      );
     }
   }
 
@@ -168,7 +183,11 @@ class AIFixRulesEngine {
     const removed = this.rules.splice(index, 1)[0];
     this._recalcStats();
     if (config.debug) {
-      console.log(`[MToolTranslatorPlugin][AIFix] ➖ 删除规则: "${String(removed.aaa).slice(0, 20)}" → "${removed.ccc.slice(0, 30)}"`);
+      console.log(
+        `[MToolTranslatorPlugin][AIFix] ➖ 删除规则: "${String(
+          removed.aaa
+        ).slice(0, 20)}" → "${removed.ccc.slice(0, 30)}"`
+      );
     }
     logger.addLog(`AI 修正规则已删除 #${index}`, LogLevel.INFO);
     return true;
@@ -177,11 +196,17 @@ class AIFixRulesEngine {
   clear(): void {
     const count = this.rules.length;
     this.rules = [];
-    this.stats = { total: 0, exactRules: 0, regexRules: 0, hits: 0, lastFix: '' };
+    this.stats = {
+      total: 0,
+      exactRules: 0,
+      regexRules: 0,
+      hits: 0,
+      lastFix: "",
+    };
     if (config.debug) {
       console.log(`[MToolTranslatorPlugin][AIFix] 🧹 清空 ${count} 条规则`);
     }
-    logger.addLog('AI 修正规则已清空', LogLevel.INFO);
+    logger.addLog("AI 修正规则已清空", LogLevel.INFO);
   }
 
   getRules(): AIFixRule[] {
@@ -196,7 +221,8 @@ class AIFixRulesEngine {
 
   fix(original: string, aiResult: string): string {
     if (!original || !aiResult) return aiResult;
-    if (typeof original !== 'string' || typeof aiResult !== 'string') return aiResult;
+    if (typeof original !== "string" || typeof aiResult !== "string")
+      return aiResult;
 
     for (const rule of this.rules) {
       if (!this._matchAAA(rule, original)) continue;
@@ -209,7 +235,12 @@ class AIFixRulesEngine {
         this.stats.hits++;
         this.stats.lastFix = `${original.slice(0, 20)} → ${fixed.slice(0, 40)}`;
         if (config.debug) {
-          console.log(`[MToolTranslatorPlugin][AIFix] ✏️ "${aiResult.slice(0, 20)}..." → "${fixed.slice(0, 30)}..."`);
+          console.log(
+            `[MToolTranslatorPlugin][AIFix] ✏️ "${aiResult.slice(
+              0,
+              20
+            )}..." → "${fixed.slice(0, 30)}..."`
+          );
         }
         return fixed;
       }
@@ -220,7 +251,7 @@ class AIFixRulesEngine {
 
   shouldIntercept(original: string): boolean {
     if (!original) return false;
-    if (typeof original !== 'string') return false;
+    if (typeof original !== "string") return false;
     for (const rule of this.rules) {
       if (this._matchAAA(rule, original)) return true;
     }
@@ -271,54 +302,69 @@ class AIFixRulesEngine {
     try {
       const ext = getFileType(file.name);
 
-      if (ext === 'json') {
+      if (ext === "json") {
         const text = await file.text();
         const data = safeJSONParse(text);
         const rules = extractRules(data);
         this.clear();
         this.addRules(rules);
-        logger.addLog(`AI 修正规则加载成功: ${file.name}（${rules.length} 条）`, LogLevel.SUCCESS);
+        logger.addLog(
+          `AI 修正规则加载成功: ${file.name}（${rules.length} 条）`,
+          LogLevel.SUCCESS
+        );
         return true;
       }
 
-      if (ext === 'csv' || ext === 'tsv') {
+      if (ext === "csv" || ext === "tsv") {
         const text = await file.text();
-        const delimiter = ext === 'csv' ? ',' : '\t';
+        const delimiter = ext === "csv" ? "," : "\t";
         const rows = parseDelimited(text, delimiter);
         const rules = rows
-          .filter(row => row.length >= 3 && row[0] && row[2])
-          .map(row => makeRule(row[0], row[1] || '', row[2]));
+          .filter((row) => row.length >= 3 && row[0] && row[2])
+          .map((row) => makeRule(row[0], row[1] || "", row[2]));
         this.clear();
         this.addRules(rules);
-        logger.addLog(`AI 修正规则加载成功: ${file.name}（${rules.length} 条）`, LogLevel.SUCCESS);
+        logger.addLog(
+          `AI 修正规则加载成功: ${file.name}（${rules.length} 条）`,
+          LogLevel.SUCCESS
+        );
         return true;
       }
 
-      if (ext === 'xlsx' || ext === 'xls') {
+      if (ext === "xlsx" || ext === "xls") {
         const rows = await parseXLSX(file);
         const rules = rows
           .filter((row: any[]) => row.length >= 3 && row[0] && row[2])
-          .map((row: any[]) => makeRule(row[0], row[1] || '', row[2]));
+          .map((row: any[]) => makeRule(row[0], row[1] || "", row[2]));
         this.clear();
         this.addRules(rules);
-        logger.addLog(`AI 修正规则加载成功: ${file.name}（${rules.length} 条）`, LogLevel.SUCCESS);
+        logger.addLog(
+          `AI 修正规则加载成功: ${file.name}（${rules.length} 条）`,
+          LogLevel.SUCCESS
+        );
         return true;
       }
 
       throw new Error(`不支持的文件格式: .${ext}`);
     } catch (e: any) {
-      logger.addLog(`AI 修正规则加载失败 [${file.name}]: ${e.message}`, LogLevel.ERROR);
+      logger.addLog(
+        `AI 修正规则加载失败 [${file.name}]: ${e.message}`,
+        LogLevel.ERROR
+      );
       return false;
     }
   }
 
   exportJSON(): {
     data: any;
-    fileName: string
+    fileName: string;
   } {
-    const arr = this.rules.map(r => ({
+    const arr = this.rules.map((r) => ({
       aaa: r.aaa instanceof RegExp ? `/${r.aaa.source}/${r.aaa.flags}` : r.aaa,
-      bbb: r.bbb instanceof RegExp ? `/${r.bbb.source}/${r.bbb.flags}` : (r.bbb || ''),
+      bbb:
+        r.bbb instanceof RegExp
+          ? `/${r.bbb.source}/${r.bbb.flags}`
+          : r.bbb || "",
       ccc: r.ccc,
     }));
     return {
@@ -329,19 +375,23 @@ class AIFixRulesEngine {
 
   exportCSV(): {
     data: string[][];
-    fileName: string
+    fileName: string;
   } {
-    const rows: string[][] = [['aaa', 'bbb', 'ccc']];
+    const rows: string[][] = [["aaa", "bbb", "ccc"]];
     for (const r of this.rules) {
       rows.push([
-        r.aaa instanceof RegExp ? `/${r.aaa.source}/${r.aaa.flags}` : String(r.aaa),
-        r.bbb instanceof RegExp ? `/${r.bbb.source}/${r.bbb.flags}` : String(r.bbb || ''),
+        r.aaa instanceof RegExp
+          ? `/${r.aaa.source}/${r.aaa.flags}`
+          : String(r.aaa),
+        r.bbb instanceof RegExp
+          ? `/${r.bbb.source}/${r.bbb.flags}`
+          : String(r.bbb || ""),
         String(r.ccc),
       ]);
     }
     return {
       data: rows,
-      fileName: timestampFileName(`AIFixRules_${getGameName()}`, "csv")
+      fileName: timestampFileName(`AIFixRules_${getGameName()}`, "csv"),
     };
   }
 

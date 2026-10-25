@@ -3,12 +3,12 @@ import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, watch } fr
 import translator from './core/translator';
 import { installEngineHooks, scanRPGMakerDialog, collectTexts } from './core/hookManager';
 import { uninstallAllEngineHooks } from './core/hookManager';
-import Icon, { type IconType } from './components/Icon.vue';
+import Icon, { type IconType } from './components/base/Icon.vue';
 import config from './config';
 import { safeJSONParse } from './utils';
 import cache from './core/cache';
 
-type Tab = 'files' | 'settings' | 'logs' | 'stats' | 'moot';
+type Tab = 'files' | 'settings' | 'logs' | 'stats' | 'moot' | 'cheat';
 const show = ref(false);
 const activeTab = ref<Tab>('files');
 const panelWidth = ref(360);
@@ -22,7 +22,8 @@ const tabsItems: {
     { key: 'settings', label: '设置', icon: 'settings' },
     { key: 'stats', label: '统计', icon: 'chart' },
     { key: 'moot', label: 'Moot', icon: 'key' },
-    { key: 'logs', label: '日志', icon: 'schedule' }
+    { key: 'logs', label: '日志', icon: 'schedule' },
+    { key: 'cheat', label: '修改器', icon: 'cheat' },
   ]
 const isPreTranslating = ref(false);
 const compactResult = ref<any>(null);
@@ -162,14 +163,9 @@ const components: Record<Tab, any> = {
   moot: defineAsyncComponent(() => import('./components/MootPanel.vue')),
   logs: defineAsyncComponent(() => import('./components/Logger.vue')),
   files: defineAsyncComponent(() => import('./components/FileUpload.vue')),
+  cheat: defineAsyncComponent(() => import('./components/CheatPanel.vue')),
 }
 const Component = computed(() => components[activeTab.value]);
-
-// KeepAlive 的 include 匹配的是组件 name（SFC 按文件名推断），
-// 之前用 tab key（小写）拼出来的字符串永远匹配不上，缓存实际未生效
-const keepAliveInclude = computed(() =>
-  Object.values(components).length ? 'Settings,Stats,MootPanel,Logger,FileUpload' : ''
-);
 
 onMounted(() => {
   translateCount.value = cache.size;
@@ -246,7 +242,7 @@ onUnmounted(() => {
 
       <!-- Tab 内容 -->
       <div class="mtool-content">
-        <KeepAlive :include="keepAliveInclude">
+        <KeepAlive include="settings,stats,moot,logs,files,cheat">
           <component :is="Component" />
         </KeepAlive>
       </div>
